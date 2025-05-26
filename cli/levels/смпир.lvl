@@ -1,0 +1,13 @@
+{
+    "file_type": "level_json",
+    "level_name": "\u0441\u043c\u043f\u0438\u0440",
+    "width": 2,
+    "height": 5,
+    "content": [
+        "12",
+        "3@",
+        "*#",
+        "  ",
+        "  "
+    ]
+}
