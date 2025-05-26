@@ -1,5 +1,7 @@
 import pygame
 import sys
+import json
+import os
 from pathlib import Path
 from engine.loader import load_textures, generate_background_grid, determine_tree_texture, render_background, enemy_type_mapping, npc_type_mapping, statue_type_mapping, load_grass_textures
 from engine.parser import parse_level_file
@@ -96,11 +98,6 @@ level_data = None  # Рівень буде завантажено після н�
 menu_items = ["Нова гра", "Збереження", "Налаштування", "Вихід"]
 menu_positions = [(SCREEN_WIDTH // 2 - 800, 450), (SCREEN_WIDTH // 2 - 800, 560), (SCREEN_WIDTH // 2 - 800, 670), (SCREEN_WIDTH // 2 - 800, 780)]  # Вирівнювання по лівому краю
 
-# Основний цикл
-running = True
-showing_menu = True  # Меню відображається спочатку
-showing_level = False  # Додано: стан для відображення рівня
-
 # Завантаження зображення паузи
 try:
     pause_menu_image = pygame.image.load(str(INTERFACE_DIR / "menu.png"))
@@ -118,12 +115,6 @@ button_positions = {
     "preferences": (SCREEN_WIDTH // 2 - 160, SCREEN_HEIGHT // 2 + 125),
     "exit": (SCREEN_WIDTH // 2 - 160, SCREEN_HEIGHT // 2 + 225),
 }
-
-# Додано: змінна для стану паузи
-is_paused = False
-
-# Додано: змінна для стану меню налаштувань
-showing_settings = False
 
 # Розташування кнопок на зображенні налаштувань
 settings_button_positions = {
@@ -143,8 +134,20 @@ except pygame.error as e:
 
 settings_menu_rect = settings_menu_image.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 25))  # Центрування зображення
 
-# Додано: прапор для запобігання повторного завантаження рівня
-level_transitioning = False
+def render_button_text(screen, menu_font, button_name, button_pos, button_image, button_text_mapping):
+    """
+    Renders button text and blits it onto the screen.
+    :param screen: Pygame screen surface.
+    :param menu_font: Font used for rendering button text.
+    :param button_name: Name of the button.
+    :param button_pos: Position of the button.
+    :param button_image: Button image surface.
+    :param button_text_mapping: Dictionary mapping button names to their text.
+    """
+    button_text = menu_font.render(button_text_mapping[button_name], True, (255, 255, 255))  # Білий текст
+    button_text_rect = button_text.get_rect(center=(button_pos[0] + button_image.get_width() // 2,
+                                                    button_pos[1] + button_image.get_height() // 2))
+    screen.blit(button_text, button_text_rect)
 
 def render_pause_menu(screen, pause_menu_image, pause_menu_buttons, button_positions, title_font, font, menu_font):
     """
@@ -166,19 +169,72 @@ def render_pause_menu(screen, pause_menu_image, pause_menu_buttons, button_posit
     # Відображення кнопок паузи
     for button_name, button_pos in button_positions.items():
         screen.blit(pause_menu_buttons, button_pos)
-
-        # Додавання тексту поверх кнопок
-        button_text = menu_font.render({
+        render_button_text(screen, menu_font, button_name, button_pos, pause_menu_buttons, {
             "continue": "Продовжити",
             "saves": "Збереження",
             "preferences": "Налаштування",
             "exit": "Вихід"
-        }[button_name], True, (255, 255, 255))  # Білий текст
-        button_text_rect = button_text.get_rect(center=(button_pos[0] + pause_menu_buttons.get_width() // 2,
-                                                        button_pos[1] + pause_menu_buttons.get_height() // 2))
-        screen.blit(button_text, button_text_rect)
+        })
 
-def render_settings_menu(screen, settings_menu_image, settings_menu_buttons, settings_button_positions, title_font, font, menu_font):
+# Змінна для поточної гучності (0.0 ... 1.0)
+current_volume = 1
+pygame.mixer.music.set_volume(current_volume)
+
+def handle_volume_slider_event(event, current_volume):
+    """
+    Обробляє події для повзунка гучності.
+    """
+    slider_x = SCREEN_WIDTH // 2 - 200
+    slider_y = SCREEN_HEIGHT // 2 - 100
+    slider_width = 400
+    slider_height = 30
+
+    # Враховуємо ширину тексту "Гучність: XX%" та відступ
+    text = menu_font.render(f"Гучність: {int(current_volume * 100)}%", True, (255, 255, 255))
+    text_rect = text.get_rect()
+    spacing = 20
+    slider_x_aligned = slider_x + text_rect.width + spacing
+
+    if event.type == pygame.MOUSEBUTTONDOWN or (event.type == pygame.MOUSEMOTION and event.buttons[0]):
+        mx, my = event.pos
+        if slider_x_aligned <= mx <= slider_x_aligned + slider_width and slider_y - 10 <= my <= slider_y + slider_height:
+            new_volume = (mx - slider_x_aligned) / slider_width
+            new_volume = max(0, min(1, new_volume))
+            pygame.mixer.music.set_volume(new_volume)
+            return new_volume
+    return current_volume
+
+def render_volume_slider(screen, current_volume, font):
+    """
+    Малює повзунок гучності поверх меню налаштувань в одному рядку з написом.
+    """
+    slider_x = SCREEN_WIDTH // 2 - 200
+    slider_y = SCREEN_HEIGHT // 2 - 100
+    slider_width = 400
+    slider_height = 10
+
+    # Текст "Гучність: XX%"
+    text = font.render(f"Гучність: {int(current_volume * 100)}%", True, (255, 255, 255))
+    text_rect = text.get_rect()
+    text_rect.centery = slider_y + slider_height // 2
+
+    # Відступ між текстом і повзунком
+    spacing = 20
+
+    # Зміщуємо повзунок праворуч від тексту
+    slider_x_aligned = slider_x + text_rect.width + spacing
+
+    # Малюємо текст
+    screen.blit(text, (slider_x, text_rect.top))
+
+    # Малюємо лінію повзунка
+    pygame.draw.rect(screen, (180, 180, 180), (slider_x_aligned, slider_y, slider_width, slider_height))
+    # Положення "ручки" повзунка
+    handle_x = slider_x_aligned + int(current_volume * slider_width)
+    handle_y = slider_y + slider_height // 2
+    pygame.draw.circle(screen, (255, 255, 255), (handle_x, handle_y), 15)
+
+def render_settings_menu(screen, settings_menu_image, settings_menu_buttons, settings_button_positions, title_font, menu_font):
     """
     Малює вікно налаштувань та кнопки на екрані.
     """
@@ -193,31 +249,138 @@ def render_settings_menu(screen, settings_menu_image, settings_menu_buttons, set
     # Відображення кнопок налаштувань
     for button_name, button_pos in settings_button_positions.items():
         screen.blit(settings_menu_buttons, button_pos)
-
-        # Додавання тексту поверх кнопок
-        button_text = menu_font.render({
+        render_button_text(screen, menu_font, button_name, button_pos, settings_menu_buttons, {
             "back": "Закрити",
             "default": "Скинути налаштування",
             "save_back": "Зберегти та закрити",
             "save": "Зберегти"
-        }[button_name], True, (255, 255, 255))  # Білий текст
-        button_text_rect = button_text.get_rect(center=(button_pos[0] + settings_menu_buttons.get_width() // 2,
-                                                        button_pos[1] + settings_menu_buttons.get_height() // 2))
-        screen.blit(button_text, button_text_rect)
+        })
+    render_volume_slider(screen, current_volume, menu_font)
 
-def toggle_pause(is_paused):
+    # --- Чекбокси ---
+    # Координати чекбоксів
+    checkbox_x = SCREEN_WIDTH // 2 + 200
+    checkbox_y_start = SCREEN_HEIGHT // 2 + 10
+    checkbox_spacing = 60
+
+    # Текстові підписи для чекбоксів
+    hints_label = menu_font.render("Підказки", True, (255, 255, 255))
+    windowed_label = menu_font.render("Віконний режим", True, (255, 255, 255))
+    level_select_label = menu_font.render("Вибір рівнів", True, (255, 255, 255))
+
+    # Відображення підписів
+    screen.blit(hints_label, (checkbox_x - hints_label.get_width() - 40, checkbox_y_start - 5))
+    screen.blit(windowed_label, (checkbox_x - windowed_label.get_width() - 40, checkbox_y_start + checkbox_spacing - 5))
+    screen.blit(level_select_label, (checkbox_x - level_select_label.get_width() - 40, checkbox_y_start + 2 * checkbox_spacing - 5))
+
+    # Чекбокс "Підказки"
+    hints_rect = pygame.Rect(checkbox_x, checkbox_y_start, 30, 30)
+    pygame.draw.rect(screen, (255, 255, 255), hints_rect, 2)
+    if settings.get("hints", True):
+        pygame.draw.line(screen, (255, 255, 255), (hints_rect.left+5, hints_rect.top+15), (hints_rect.left+15, hints_rect.bottom-5), 3)
+        pygame.draw.line(screen, (255, 255, 255), (hints_rect.left+15, hints_rect.bottom-5), (hints_rect.right-5, hints_rect.top+5), 3)
+
+    # Чекбокс "Віконний режим"
+    windowed_rect = pygame.Rect(checkbox_x, checkbox_y_start + checkbox_spacing, 30, 30)
+    pygame.draw.rect(screen, (255, 255, 255), windowed_rect, 2)
+    if settings.get("fullscreen", False):
+        pygame.draw.line(screen, (255, 255, 255), (windowed_rect.left+5, windowed_rect.top+15), (windowed_rect.left+15, windowed_rect.bottom-5), 3)
+        pygame.draw.line(screen, (255, 255, 255), (windowed_rect.left+15, windowed_rect.bottom-5), (windowed_rect.right-5, windowed_rect.top+5), 3)
+
+    # Чекбокс "Вибір рівнів"
+    level_select_rect = pygame.Rect(checkbox_x, checkbox_y_start + 2 * checkbox_spacing, 30, 30)
+    pygame.draw.rect(screen, (255, 255, 255), level_select_rect, 2)
+    if settings.get("level_select", False):
+        pygame.draw.line(screen, (255, 255, 255), (level_select_rect.left+5, level_select_rect.top+15), (level_select_rect.left+15, level_select_rect.bottom-5), 3)
+        pygame.draw.line(screen, (255, 255, 255), (level_select_rect.left+15, level_select_rect.bottom-5), (level_select_rect.right-5, level_select_rect.top+5), 3)
+
+    # Обробка натискання на кнопки "Зберегти", "Зберегти та закрити", "Закрити" та чекбокси
+    mouse_pressed = pygame.mouse.get_pressed()
+    if mouse_pressed[0]:  # Ліва кнопка миші
+        mouse_pos = pygame.mouse.get_pos()
+        # SAVE
+        save_btn_pos = settings_button_positions["save"]
+        save_btn_rect = settings_menu_buttons.get_rect(topleft=save_btn_pos)
+        if save_btn_rect.collidepoint(mouse_pos):
+            settings["volume"] = int(current_volume * 100)
+            save_settings_to_file(settings)
+        # SAVE_BACK
+        save_back_btn_pos = settings_button_positions["save_back"]
+        save_back_btn_rect = settings_menu_buttons.get_rect(topleft=save_back_btn_pos)
+        if save_back_btn_rect.collidepoint(mouse_pos):
+            settings["volume"] = int(current_volume * 100)
+            save_settings_to_file(settings)
+            globals()["showing_settings"] = False
+        # BACK
+        back_btn_pos = settings_button_positions["back"]
+        back_btn_rect = settings_menu_buttons.get_rect(topleft=back_btn_pos)
+        if back_btn_rect.collidepoint(mouse_pos):
+            globals()["showing_settings"] = False
+        # Чекбокс "Підказки"
+        if hints_rect.collidepoint(mouse_pos):
+            settings["hints"] = not settings.get("hints", True)
+        # Чекбокс "Віконний режим"
+        if windowed_rect.collidepoint(mouse_pos):
+            settings["fullscreen"] = not settings.get("fullscreen", False)
+            if settings["fullscreen"]:
+                screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.FULLSCREEN)
+            else:
+                screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.RESIZABLE)
+        # Чекбокс "Вибір рівнів"
+        if level_select_rect.collidepoint(mouse_pos):
+            settings["level_select"] = not settings.get("level_select", False)
+
+# Функція для збереження налаштувань у файл
+def save_settings_to_file(settings_dict):
     """
-    Перемикає стан паузи.
+    Зберігає налаштування у файл settings.json у поточній директорії.
     """
-    return not is_paused
+    path = os.path.join(os.getcwd(), "settings.json")
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(settings_dict, f, indent=4, ensure_ascii=False)
+    print("Налаштування збережено у settings.json")
 
-# Додано: змінна для стану меню характеристик
-showing_stats = False
+# Функція для завантаження налаштувань з файлу
+def load_settings_from_file():
+    """
+    Завантажує налаштування з файлу settings.json, якщо він існує.
+    """
+    path = os.path.join(os.getcwd(), "settings.json")
+    if os.path.exists(path):
+        with open(path, "r", encoding="utf-8") as f:
+            try:
+                loaded = json.load(f)
+                print("Налаштування завантажено з settings.json")
+                return loaded
+            except Exception as e:
+                print(f"Помилка читання settings.json: {e}")
+    return None
 
-# Змінна для відстеження, чи була відтворена .wav
-menu1_played = False
+# Стандартні налаштування як окремий словник
+DEFAULT_SETTINGS = {
+    "volume": 100,
+    "fullscreen": False,
+    "hints": True,
+    "level_select": False
+}
 
-# Функція для відтворення музики
+# Налаштування користувача
+settings = dict(DEFAULT_SETTINGS)
+
+# Завантаження налаштувань з settings.json, якщо файл існує
+loaded_settings = load_settings_from_file()
+if loaded_settings:
+    settings.update(loaded_settings)
+
+# Застосування налаштувань
+current_volume = settings.get("volume", 100) / 100
+pygame.mixer.music.set_volume(current_volume)
+# Якщо потрібно застосувати fullscreen:
+if settings.get("fullscreen"):
+    screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.FULLSCREEN)
+else:
+    screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.RESIZABLE)
+    
 def play_music(music_file, loop=False):
     """
     Відтворює музичний файл.
@@ -231,21 +394,69 @@ def play_music(music_file, loop=False):
         else:
             pygame.mixer.music.play(0)  # 0 для відтворення один раз
     except pygame.error as e:
-        print(f"Помилка відтворення музики: {e}")
-
-# Змінна для збереження поточної музики
-current_music = None
-
-# Функція для зупинки музики
+        print(f"Помилка відтворення музики: {e}")    
+    
+def toggle_pause(is_paused):
+    """
+    Перемикає стан паузи.
+    """
+    return not is_paused
+    
 def stop_music():
     """
     Зупиняє відтворення музики.
     """
-    pygame.mixer.music.stop()
+    pygame.mixer.music.stop() 
 
-# Перевірка типів значень у statue_type_mapping
+# Функція для встановлення стандартних налаштувань
+def set_default_settings():
+    """
+    Встановлює стандартні налаштування:
+    - Гучність 100
+    - Підказки увімкнено
+    - Віконний режим та Вибір рівнів вимкнено
+    """
+    settings.clear()
+    settings.update(DEFAULT_SETTINGS)
+    globals()["current_volume"] = settings["volume"] / 100
+    pygame.mixer.music.set_volume(globals()["current_volume"])
+    save_settings_to_file(settings)
+    # Примусове перемальовування меню налаштувань
+    render_settings_menu(
+        screen,
+        settings_menu_image,
+        settings_menu_buttons,
+        settings_button_positions,
+        title_font,
+        font,
+        menu_font
+    )
+    pygame.display.flip()
+
+# Основний цикл
+running = True
+showing_menu = True
+showing_level = False
+is_paused = False
+showing_settings = False
+level_transitioning = False
+showing_stats = False
+menu1_played = False
+current_music = None
+
+# --- Додаткові змінні для рівня ---
+player = None
+blocks = []
+enemies = []
+items = []
+statues = []
+npcs = []
+camera = None
+background_grid = None
+pressed_keys = set()
 
 while running:
+    clock.tick(60)
     if showing_menu:
         # Відтворення menu1.wav, якщо ще не відтворювалася
         if not menu1_played:
@@ -362,208 +573,276 @@ while running:
                         else:
                             showing_menu = True
                     else:
+                        # --- Додаємо відкриття меню паузи ---
                         is_paused = not is_paused
-                        print(f"Гра {'на паузі' if is_paused else 'продовжена'}")
+                        # --- Додаємо перемальовування меню паузи одразу ---
+                        if is_paused and not showing_stats and not showing_settings:
+                            render_pause_menu(screen, pause_menu_image, pause_menu_buttons, button_positions, title_font, font, menu_font)
+                            pygame.display.flip()
                 elif event.key == pygame.K_c:
                     showing_stats = not showing_stats
-                    print(f"Меню характеристик {'увімкнено' if showing_stats else 'вимкнено'}")
+                elif not is_paused and not showing_stats:
+                    pressed_keys.add(event.key)
+            elif event.type == pygame.KEYUP and not is_paused and not showing_stats:
+                pressed_keys.discard(event.key)
+            elif event.type == pygame.MOUSEBUTTONDOWN and is_paused:
+                mouse_pos = event.pos
+                for button_name, button_pos in button_positions.items():
+                    button_rect = pause_menu_buttons.get_rect(topleft=button_pos)
+                    if button_rect.collidepoint(mouse_pos):  # Обробка кліків по кнопках паузи
+                        print(f"Кнопка '{button_name}' натиснута.")  # Додано: журнал
+                        if button_name == "continue":
+                            is_paused = toggle_pause(is_paused)  # Продовжити гру
+                        elif button_name == "saves":
+                            print("Відкриття меню збережень...")  # Логіка для збережень
+                        elif button_name == "preferences":
+                            showing_settings = True # Логіка для налаштувань
+                            is_paused = False
+                        elif button_name == "exit":
+                            running = False  # Вихід із гри
+                            running_level = False
+            elif event.type == pygame.MOUSEBUTTONDOWN and showing_menu:
+                mouse_pos = event.pos
+                for text, rect in text_rects:
+                    if rect.collidepoint(mouse_pos):
+                        print(f"Клік по тексту: {text}")
+                        if text == "Вихід":
+                            running = False
+                        elif text == "Нова гра":
+                            showing_menu = False
+                            showing_level = True
+                        elif text == "Налаштування":
+                            showing_menu = False
+                            showing_settings = True
+            elif event.type == pygame.MOUSEBUTTONDOWN and showing_settings:  # Обробка кліків по кнопках меню налаштувань
+                mouse_pos = event.pos
+                for button_name, button_pos in settings_button_positions.items():
+                    button_rect = settings_menu_buttons.get_rect(topleft=button_pos)
+                    if button_rect.collidepoint(mouse_pos):
+                        print(f"Кнопка '{button_name}' натиснута в меню налаштувань.")
+                        if button_name == "back":
+                            showing_settings = False  # Повернення до попереднього меню
+                            if is_paused:
+                                is_paused = True
+                            else:
+                                showing_menu = True
+                # --- Обробка чекбоксів тільки тут ---
+                checkbox_x = SCREEN_WIDTH // 2 + 200
+                checkbox_y_start = SCREEN_HEIGHT // 2 + 10
+                checkbox_spacing = 60
+                hints_rect = pygame.Rect(checkbox_x, checkbox_y_start, 30, 30)
+                windowed_rect = pygame.Rect(checkbox_x, checkbox_y_start + checkbox_spacing, 30, 30)
+                level_select_rect = pygame.Rect(checkbox_x, checkbox_y_start + 2 * checkbox_spacing, 30, 30)
+                updated = False
+                if hints_rect.collidepoint(mouse_pos):
+                    settings["hints"] = not settings.get("hints", True)
+                    updated = True
+                if windowed_rect.collidepoint(mouse_pos):
+                    settings["fullscreen"] = not settings.get("fullscreen", False)
+                    if settings["fullscreen"]:
+                        screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.FULLSCREEN)
+                    else:
+                        screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.RESIZABLE)
+                    updated = True
+                if level_select_rect.collidepoint(mouse_pos):
+                    settings["level_select"] = not settings.get("level_select", False)
+                    updated = True
+                # Оновлення екрану після зміни чекбоксів
+                if updated:
+                    render_settings_menu(
+                        screen,
+                        settings_menu_image,
+                        settings_menu_buttons,
+                        settings_button_positions,
+                        title_font,
+                        menu_font
+                    )
+                    pygame.display.flip()
+            elif showing_level:
+                print("Відображення рівня")
 
-        if is_paused and not showing_stats and not showing_settings:
-            render_pause_menu(screen, pause_menu_image, pause_menu_buttons, button_positions, title_font, font, menu_font)
-        elif showing_settings:
-            render_settings_menu(screen, settings_menu_image, settings_menu_buttons, settings_button_positions, title_font, font, menu_font)
-    elif showing_level:
-        print("Відображення рівня")
+            # Визначаємо, яку музику потрібно відтворити
+            if level_path == LEVELS_DIR / "level0.lvl":
+                music_file = str(ASSETS_DIR / "audio" / "start_loc_bg2.wav")
+                level_key = "level0"
+            elif level_path == LEVELS_DIR / "level1.lvl":
+                music_file = str(ASSETS_DIR / "audio" / "menu2.wav")
+                level_key = "level1"
+            else:
+                music_file = None
+                level_key = None
 
-        # Визначаємо, яку музику потрібно відтворити
-        if level_path == LEVELS_DIR / "level0.lvl":
-            music_file = str(ASSETS_DIR / "audio" / "start_loc_bg2.wav")
-            level_key = "level0"
-        elif level_path == LEVELS_DIR / "level1.lvl":
-            music_file = str(ASSETS_DIR / "audio" / "menu2.wav")
-            level_key = "level1"
-        else:
-            music_file = None
-            level_key = None
+            # Виводимо інформацію для налагодження
+            print(f"level_path: {level_path}")
+            print(f"music_file: {music_file}")
+            print(f"current_music: {current_music}")
 
-        # Виводимо інформацію для налагодження
-        print(f"level_path: {level_path}")
-        print(f"music_file: {music_file}")
-        print(f"current_music: {current_music}")
+            # Перевіряємо, чи існує файл
+            if music_file and not Path(music_file).exists():
+                print(f"Помилка: Файл {music_file} не знайдено!")
+                music_file = None  # Щоб не було спроб відтворення
 
-        # Перевіряємо, чи існує файл
-        if music_file and not Path(music_file).exists():
-            print(f"Помилка: Файл {music_file} не знайдено!")
-            music_file = None  # Щоб не було спроб відтворення
+            # Відтворюємо музику, якщо вона змінилася
+            if music_file and current_music != level_key:
+                stop_music()
+                play_music(music_file)
+                current_music = level_key
 
-        # Відтворюємо музику, якщо вона змінилася
-        if music_file and current_music != level_key:
-            stop_music()
-            play_music(music_file)
-            current_music = level_key
+            if player is None or camera is None or background_grid is None:
+                print("Ініціалізація рівня")
+                level_data = parse_level_file(level_path)
 
-        if level_data is None:
-            print("Завантаження даних рівня")
-            level_data = parse_level_file(level_path)
+                if level_data['player_start'] is None:
+                    print("Помилка: Початкова позиція гравця не визначена у файлі рівня.")
+                    running = False
+                    break
 
-        if level_data['player_start'] is None:
-            print("Помилка: Початкова позиція гравця не визначена у файлі рівня.")
-            running = False
-            break
+                player = Player(
+                    (level_data['player_start'][0] * TILE_SIZE, level_data['player_start'][1] * TILE_SIZE),
+                    {
+                        "player_left": textures["player_left"],
+                        "player_right": textures["player_right"],
+                        "player_back_left": textures.get("player_back_left", textures["player_left"]),
+                        "player_back_right": textures.get("player_back_right", textures["player_right"])
+                    }
+                )
+                
+                # Функція для визначення текстури блоку залежно від оточення
+                def determine_block_texture(x, y, blocks_set):
+                    """
+                    Визначає текстуру блоку залежно від його оточення.
 
-        player = Player(
-            (level_data['player_start'][0] * TILE_SIZE, level_data['player_start'][1] * TILE_SIZE),
-            {
-                "player_left": textures["player_left"],
-                "player_right": textures["player_right"],
-                "player_back_left": textures.get("player_back_left", textures["player_left"]),
-                "player_back_right": textures.get("player_back_right", textures["player_right"])
-            }
-        )
-        
-        # Функція для визначення текстури блоку залежно від оточення
-        def determine_block_texture(x, y, blocks_set):
-            """
-            Визначає текстуру блоку залежно від його оточення.
+                    :param x: Координата X блоку
+                    :param y: Координата Y блоку
+                    :param blocks_set: Набір координат усіх блоків
+                    :return: Відповідна текстура блоку
+                    """
+                    has_left = (x - 1, y) in blocks_set
+                    has_right = (x + 1, y) in blocks_set
+                    has_top = (x, y - 1) in blocks_set
+                    has_bottom = (x, y + 1) in blocks_set
 
-            :param x: Координата X блоку
-            :param y: Координата Y блоку
-            :param blocks_set: Набір координат усіх блоків
-            :return: Відповідна текстура блоку
-            """
-            has_left = (x - 1, y) in blocks_set
-            has_right = (x + 1, y) in blocks_set
-            has_top = (x, y - 1) in blocks_set
-            has_bottom = (x, y + 1) in blocks_set
+                    # Найбільш специфічні умови
+                    if has_left and has_right and has_top and has_bottom:
+                        return textures['wall']
+                    if has_left and has_right and has_top:
+                        return textures['wall_bottom']
+                    if has_left and has_right and has_bottom:
+                        return textures['wall_top']
+                    if has_top and has_bottom and has_left:
+                        return textures['wall_right']
+                    if has_top and has_bottom and has_right:
+                        return textures['wall_left']
 
-            # Найбільш специфічні умови
-            if has_left and has_right and has_top and has_bottom:
-                return textures['wall']
-            if has_left and has_right and has_top:
-                return textures['wall_bottom']
-            if has_left and has_right and has_bottom:
-                return textures['wall_top']
-            if has_top and has_bottom and has_left:
-                return textures['wall_right']
-            if has_top and has_bottom and has_right:
-                return textures['wall_left']
+                    # Менш специфічні умови
+                    if has_left and has_right:
+                        return textures['wall_top_bottom']
+                    if has_top and has_bottom:
+                        return textures['wall_left_right']
+                    if has_top and has_left:
+                        return textures['wall_right_bottom']
+                    if has_top and has_right:
+                        return textures['wall_left_bottom']
+                    if has_bottom and has_left:
+                        return textures['wall_right_top']
+                    if has_bottom and has_right:
+                        return textures['wall_left_top']
 
-            # Менш специфічні умови
-            if has_left and has_right:
-                return textures['wall_top_bottom']
-            if has_top and has_bottom:
-                return textures['wall_left_right']
-            if has_top and has_left:
-                return textures['wall_right_bottom']
-            if has_top and has_right:
-                return textures['wall_left_bottom']
-            if has_bottom and has_left:
-                return textures['wall_right_top']
-            if has_bottom and has_right:
-                return textures['wall_left_top']
+                    # Найменш специфічні умови
+                    if has_top:
+                        return textures['wall_left_right_bottom']
+                    if has_bottom:
+                        return textures['wall_left_right_top']
+                    if has_left:
+                        return textures['wall_right_top_bottom']
+                    if has_right:
+                        return textures['wall_left_top_bottom']
 
-            # Найменш специфічні умови
-            if has_top:
-                return textures['wall_left_right_bottom']
-            if has_bottom:
-                return textures['wall_left_right_top']
-            if has_left:
-                return textures['wall_right_top_bottom']
-            if has_right:
-                return textures['wall_left_top_bottom']
+                    # Якщо немає сусідів
+                    return textures['wall_block']
 
-            # Якщо немає сусідів
-            return textures['wall_block']
+                # Створення набору координат блоків для швидкого доступу
+                blocks_set = {(block['x'], block['y']) for block in level_data['blocks']}
 
-        # Створення набору координат блоків для швидкого доступу
-        blocks_set = {(block['x'], block['y']) for block in level_data['blocks']}
+                blocks = [
+                    Block(
+                        block['x'] * TILE_SIZE,
+                        block['y'] * TILE_SIZE,
+                        block['is_solid'],
+                        determine_tree_texture(block['x'], block['y'], blocks_set, textures) if level_path.name == "level0.lvl" else determine_block_texture(block['x'], block['y'], blocks_set)
+                    )
+                    for block in level_data['blocks']
+                ]
 
-        blocks = [
-            Block(
-                block['x'] * TILE_SIZE,
-                block['y'] * TILE_SIZE,
-                block['is_solid'],
-                determine_tree_texture(block['x'], block['y'], blocks_set, textures) if level_path.name == "level0.lvl" else determine_block_texture(block['x'], block['y'], blocks_set)
-            )
-            for block in level_data['blocks']
-        ]
-
-        # Завантаження текстур ворогів
-        enemy_textures = {
-            "zombie_left": textures["zombie_left"],
-            "zombie_right": textures["zombie_right"],
-            "zombie_back_left": textures["zombie_back_left"],
-            "zombie_back_right": textures["zombie_back_right"],
-            "skeleton_left": textures["skeleton_left"],
-            "skeleton_right": textures["skeleton_right"],
-            "skeleton_back_left": textures["skeleton_back_left"],
-            "skeleton_back_right": textures["skeleton_back_right"],
-            "boss_left": textures["boss_left"],
-            "boss_right": textures["boss_right"],
-            "boss_back_left": textures["boss_back_left"],
-            "boss_back_right": textures["boss_back_right"],
-        }
-
-        # Мапінг типів ворогів із файлу рівня до ключів у словнику текстур
-        enemies = [
-            Enemy(
-                enemy['x'], enemy['y'], enemy_type_mapping.get(enemy['type'], 'zombie_left'), enemy_textures,
-                health={
-                    'zombie': 1,
-                    'skeleton': 3,
-                    'boss': 5
-                }.get(enemy_type_mapping.get(enemy['type'], 'zombie_left'), 1)  # Значення здоров'я за замовчуванням — 1
-            ) for enemy in level_data['enemies']
-        ]
-        items = [
-            Item(item['x'] * TILE_SIZE, item['y'] * TILE_SIZE, item.get('is_solid', True), textures['item_frames'])
-            for item in level_data['items']
-        ]
-
-        # Оновлення ключів у statue_type_mapping
-        statue_type_mapping = {f"statue{key}": value for key, value in statue_type_mapping.items()}
-
-        # Перевірка оновлених ключів
-        print(f"Оновлені ключі в statue_type_mapping: {list(statue_type_mapping.keys())}")
-
-        statues = [
-            IntStat(
-                statue['x'] * TILE_SIZE,
-                statue['y'] * TILE_SIZE,
-                statue.get('is_solid', True),
-                f"statue{statue['type']}",  # тип як str
-                textures  # словник текстур
-            )
-            for statue in level_data['statues']
-        ]
-
-        npcs = [
-            Npc(
-                npc['x'] * TILE_SIZE,
-                npc['y'] * TILE_SIZE,
-                npc_type_mapping.get(npc['type'], 'teleport'),
-                {
-                    'enter': textures['enter'],
-                    'teleport': textures['teleport']
+                # Завантаження текстур ворогів
+                enemy_textures = {
+                    "zombie_left": textures["zombie_left"],
+                    "zombie_right": textures["zombie_right"],
+                    "zombie_back_left": textures["zombie_back_left"],
+                    "zombie_back_right": textures["zombie_back_right"],
+                    "skeleton_left": textures["skeleton_left"],
+                    "skeleton_right": textures["skeleton_right"],
+                    "skeleton_back_left": textures["skeleton_back_left"],
+                    "skeleton_back_right": textures["skeleton_back_right"],
+                    "boss_left": textures["boss_left"],
+                    "boss_right": textures["boss_right"],
+                    "boss_back_left": textures["boss_back_left"],
+                    "boss_back_right": textures["boss_back_right"],
                 }
-            )
-            for npc in level_data['npc']
-        ]
 
-        # Ініціалізація камери
-        camera = Camera(level_data['width'] * TILE_SIZE, level_data['height'] * TILE_SIZE)
+                # Мапінг типів ворогів із файлу рівня до ключів у словнику текстур
+                enemies = [
+                    Enemy(
+                        enemy['x'], enemy['y'], enemy_type_mapping.get(enemy['type'], 'zombie_left'), enemy_textures,
+                        health={
+                            'zombie': 1,
+                            'skeleton': 3,
+                            'boss': 5
+                        }.get(enemy_type_mapping.get(enemy['type'], 'zombie_left'), 1)  # Значення здоров'я за замовчуванням — 1
+                    ) for enemy in level_data['enemies']
+                ]
+                items = [
+                    Item(item['x'] * TILE_SIZE, item['y'] * TILE_SIZE, item.get('is_solid', True), textures['item_frames'])
+                    for item in level_data['items']
+                ]
 
-        # Генерація сітки фону на основі розміру рівня
-        background_grid = generate_background_grid(textures, level_data, level_path.name)
+                # Оновлення ключів у statue_type_mapping
+                statue_type_mapping = {f"statue{key}": value for key, value in statue_type_mapping.items()}
 
-        pressed_keys = set()  # Додано: набір для збереження натиснутих клавіш
+                # Перевірка оновлених ключів
+                print(f"Оновлені ключі в statue_type_mapping: {list(statue_type_mapping.keys())}")
 
-        running_level = True
-        while running_level:
-            clock.tick(60)
+                statues = [
+                    IntStat(
+                        statue['x'] * TILE_SIZE,
+                        statue['y'] * TILE_SIZE,
+                        statue.get('is_solid', True),
+                        f"statue{statue['type']}",  # тип як str
+                        textures  # словник текстур
+                    )
+                    for statue in level_data['statues']
+                ]
+
+                npcs = [
+                    Npc(
+                        npc['x'] * TILE_SIZE,
+                        npc['y'] * TILE_SIZE,
+                        npc_type_mapping.get(npc['type'], 'teleport'),
+                        {
+                            'enter': textures['enter'],
+                            'teleport': textures['teleport']
+                        }
+                    )
+                    for npc in level_data['npc']
+                ]
+
+                # Ініціалізація камери
+                camera = Camera(level_data['width'] * TILE_SIZE, level_data['height'] * TILE_SIZE)
+
+                # Генерація сітки фону на основі розміру рівня
+                background_grid = generate_background_grid(textures, level_data, level_path.name)
+
             screen.fill((0, 0, 0))
-
-            # Рендеринг фону з урахуванням камери
             render_background(screen, background_grid, camera)
 
             # Упорядкування об'єктів для малювання за координатою `y`
@@ -622,54 +901,60 @@ while running:
                 luck_text_rect = luck_text.get_rect(center=(SCREEN_WIDTH // 2 - 145, SCREEN_HEIGHT // 2 + 250))
                 screen.blit(luck_text, luck_text_rect)
 
-            # Обробка подій
+            # --- Обробка подій ---
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     running = False
-                    running_level = False
-                elif event.type == pygame.USEREVENT + 1:  # Скидання позиції гравця після анімації
-                    pygame.time.set_timer(pygame.USEREVENT + 1, 0)  # Вимикаємо таймер
-                    player.rect.move_ip(0, 0)  # Скидаємо зміщення
+                elif event.type == pygame.USEREVENT + 1:
+                    pygame.time.set_timer(pygame.USEREVENT + 1, 0)
+                    player.rect.move_ip(0, 0)
                 elif event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_ESCAPE:  # Натискання ESC
-                        if showing_stats:  # Якщо меню характеристик увімкнено, вимикаємо його
+                    if event.key == pygame.K_ESCAPE:
+                        if showing_stats:
                             showing_stats = False
+                        elif showing_settings:
+                            showing_settings = False
+                            if is_paused:
+                                is_paused = True
+                            else:
+                                showing_menu = True
+                                showing_level = False
                         else:
-                            is_paused = toggle_pause(is_paused)  # Викликаємо toggle_pause
-                            print(f"Гра {'на паузі' if is_paused else 'продовжена'}")  # Додано: журнал
-                    elif event.key == pygame.K_c:  # Натискання клавіші C
-                        showing_stats = not showing_stats  # Перемикаємо стан меню характеристик
-                        print(f"Меню характеристик {'увімкнено' if showing_stats else 'вимкнено'}")
-                    elif not is_paused and not showing_stats:  # Інші дії тільки якщо гра не на паузі та меню характеристик вимкнено
+                            is_paused = not is_paused
+                            if is_paused and not showing_stats and not showing_settings:
+                                render_pause_menu(screen, pause_menu_image, pause_menu_buttons, button_positions, title_font, font, menu_font)
+                                pygame.display.flip()
+                    elif event.key == pygame.K_c:
+                        showing_stats = not showing_stats
+                    elif not is_paused and not showing_stats:
                         pressed_keys.add(event.key)
                 elif event.type == pygame.KEYUP and not is_paused and not showing_stats:
                     pressed_keys.discard(event.key)
-                elif event.type == pygame.MOUSEBUTTONDOWN and is_paused:  # Обробка кліків по кнопках паузи
+                elif event.type == pygame.MOUSEBUTTONDOWN and is_paused:
                     mouse_pos = event.pos
                     for button_name, button_pos in button_positions.items():
                         button_rect = pause_menu_buttons.get_rect(topleft=button_pos)
-                        if button_rect.collidepoint(mouse_pos):  # Обробка кліків по кнопках паузи
-                            print(f"Кнопка '{button_name}' натиснута.")  # Додано: журнал
+                        if button_rect.collidepoint(mouse_pos):
+                            print(f"Кнопка '{button_name}' натиснута.")
                             if button_name == "continue":
-                                is_paused = toggle_pause(is_paused)  # Продовжити гру
+                                is_paused = toggle_pause(is_paused)
                             elif button_name == "saves":
-                                print("Відкриття меню збережень...")  # Логіка для збережень
+                                print("Відкриття меню збережень...")
                             elif button_name == "preferences":
-                                showing_settings = True # Логіка для налаштувань
+                                showing_settings = True
                                 is_paused = False
                             elif button_name == "exit":
-                                running = False  # Вихід із гри
-                                running_level = False
+                                running = False
                 elif event.type == pygame.MOUSEBUTTONDOWN and showing_menu:
                     mouse_pos = event.pos
                     for text, rect in text_rects:
-                        if rect.collidepoint(mouse_pos):  # Перевіряємо, чи клік у межах тексту
+                        if rect.collidepoint(mouse_pos):
                             print(f"Клік по тексту: {text}")
                             if text == "Вихід":
-                                running = False  # Закриваємо програму
+                                running = False
                             elif text == "Нова гра":
-                                showing_menu = False  # Приховуємо меню
-                                showing_level = True  # Відображаємо рівень
+                                showing_menu = False
+                                showing_level = True
                             elif text == "Налаштування":
                                 showing_menu = False
                                 showing_settings = True
@@ -680,426 +965,387 @@ while running:
                         if button_rect.collidepoint(mouse_pos):
                             print(f"Кнопка '{button_name}' натиснута в меню налаштувань.")
                             if button_name == "back":
-                                showing_settings = False  # Повернення до попереднього меню
+                                showing_settings = False
                                 if is_paused:
                                     is_paused = True
                                 else:
                                     showing_menu = True
-            if is_paused and not showing_stats and not showing_settings:
-                render_pause_menu(screen, pause_menu_image, pause_menu_buttons, button_positions, title_font, font, menu_font)
-            elif showing_settings:
-                render_settings_menu(screen, settings_menu_image, settings_menu_buttons, settings_button_positions, title_font, font, menu_font)
-            else:
-                # Оновлення стану гри, якщо не на паузі
+                    # --- Обробка чекбоксів тільки тут ---
+                    checkbox_x = SCREEN_WIDTH // 2 + 200
+                    checkbox_y_start = SCREEN_HEIGHT // 2 + 10
+                    checkbox_spacing = 60
+                    hints_rect = pygame.Rect(checkbox_x, checkbox_y_start, 30, 30)
+                    windowed_rect = pygame.Rect(checkbox_x, checkbox_y_start + checkbox_spacing, 30, 30)
+                    level_select_rect = pygame.Rect(checkbox_x, checkbox_y_start + 2 * checkbox_spacing, 30, 30)
+                    updated = False
+                    if hints_rect.collidepoint(mouse_pos):
+                        settings["hints"] = not settings.get("hints", True)
+                        updated = True
+                    if windowed_rect.collidepoint(mouse_pos):
+                        settings["fullscreen"] = not settings.get("fullscreen", False)
+                        if settings["fullscreen"]:
+                            screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.FULLSCREEN)
+                        else:
+                            screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.RESIZABLE)
+                        updated = True
+                    if level_select_rect.collidepoint(mouse_pos):
+                        settings["level_select"] = not settings.get("level_select", False)
+                        updated = True
+                    # Оновлення екрану після зміни чекбоксів
+                    if updated:
+                        render_settings_menu(
+                            screen,
+                            settings_menu_image,
+                            settings_menu_buttons,
+                            settings_button_positions,
+                            title_font,
+                            menu_font
+                        )
+                        pygame.display.flip()
+            # --- Оновлення стану гри, якщо не на паузі ---
+            if not is_paused and not showing_stats and not showing_settings:
                 # Оновлення стану ворогів
                 for enemy in enemies:
-                    # Зберігаємо початкову позицію ворога
                     initial_position = enemy.rect.topleft
-
-                    # Перевірка дистанції до гравця
-                    distance_to_player = ((enemy.rect.centerx - player.rect.centerx) ** 2 + 
+                    distance_to_player = ((enemy.rect.centerx - player.rect.centerx) ** 2 +
                                           (enemy.rect.centery - player.rect.centery) ** 2) ** 0.5
-                    if distance_to_player <= 600:  # Ворог рухається тільки якщо гравець у радіусі 600
-                        # Перевірка наявності блоків між ворогом і гравцем
+                    if distance_to_player <= 600:
                         path_blocked = False
-                        if enemy.rect.x != player.rect.x:  # Перевірка по осі X
+                        if enemy.rect.x != player.rect.x:
                             step = 1 if enemy.rect.x < player.rect.x else -1
                             for x in range(enemy.rect.x, player.rect.x, step * TILE_SIZE):
                                 if any(block.is_solid and block.rect.collidepoint(x, enemy.rect.centery) for block in blocks):
                                     path_blocked = True
                                     break
-                        if enemy.rect.y != player.rect.y and not path_blocked:  # Перевірка по осі Y
+                        if enemy.rect.y != player.rect.y and not path_blocked:
                             step = 1 if enemy.rect.y < player.rect.y else -1
                             for y in range(enemy.rect.y, player.rect.y, step * TILE_SIZE):
                                 if any(block.is_solid and block.rect.collidepoint(enemy.rect.centerx, y) for block in blocks):
                                     path_blocked = True
                                     break
-
                         if not path_blocked:
                             enemy.move_towards_player(player.rect, blocks)
-
-                            # Оновлюємо позицію ворога по осі X
                             enemy.rect.x += enemy.dx
                             for block in blocks:
                                 if block.is_solid and enemy.rect.colliderect(block.rect):
-                                    enemy.rect.x = initial_position[0]  # Повертаємо ворога на початкову позицію по X
+                                    enemy.rect.x = initial_position[0]
                                     break
                             for statue in statues:
                                 if statue.is_solid and enemy.rect.colliderect(statue.rect):
-                                    enemy.rect.x = initial_position[0]  # Повертаємо ворога на початкову позицію по X
+                                    enemy.rect.x = initial_position[0]
                                     break
-
-                            # Оновлюємо позицію ворога по осі Y
                             enemy.rect.y += enemy.dy
                             for block in blocks:
                                 if block.is_solid and enemy.rect.colliderect(block.rect):
-                                    enemy.rect.y = initial_position[1]  # Повертаємо ворога на початкову позицію по Y
+                                    enemy.rect.y = initial_position[1]
                                     break
                             for statue in statues:
                                 if statue.is_solid and enemy.rect.colliderect(statue.rect):
-                                    enemy.rect.y = initial_position[1]  # Повертаємо ворога на початкову позицію по Y
+                                    enemy.rect.y = initial_position[1]
                                     break
-
-                        # Перевірка колізій зі статуями
                         for statue in statues:
                             if statue.is_solid and enemy.rect.colliderect(statue.rect):
-                                enemy.rect.topleft = initial_position  # Повертаємо ворога на початкову позицію
+                                enemy.rect.topleft = initial_position
                                 break
-
-                        # Перевірка колізії з гравцем
-                        if player.rect.colliderect(enemy.rect):  # Якщо ворог наступає на текстуру гравця
-                            # Зупиняємо ворога
+                        if player.rect.colliderect(enemy.rect):
                             enemy.dx = 0
                             enemy.dy = 0
-                            # Викликаємо атаку ворога
                             enemy.attack(player)
-
-                    # Скидаємо зміщення після обробки
                     enemy.dx = 0
                     enemy.dy = 0
 
-                # Оновлення стану гравця
+                # --- Оновлення стану гравця ---
                 keys = {pygame.K_w, pygame.K_a, pygame.K_s, pygame.K_d}
                 active_keys = {key for key in pressed_keys if key in keys}
                 player.handle_input(active_keys)
-
-                # Скидання руху, якщо немає активних клавіш
                 if not active_keys:
                     player.dx = 0
                     player.dy = 0
-
                 player.update(blocks, items, statues)
-
-                # Оновлення камери після оновлення позиції гравця
+                # --- Оновлення камери ---
                 camera.update(player)
+            # Перевірка колізій з ворогами
+            for enemy in enemies:
+                if player.rect.colliderect(enemy.rect):  # Перевірка перетину прямокутників
+                    # Додаткова перевірка для точнішого визначення колізії
+                    overlap_rect = player.rect.clip(enemy.rect)  # Отримуємо область перетину
+                    if overlap_rect.width > 0 and overlap_rect.height > 0:  # Якщо є реальне перетинання
+                        enemy.attack(player)  # Виклик атаки ворога
 
-                # Перевірка колізій з ворогами
-                for enemy in enemies:
-                    if player.rect.colliderect(enemy.rect):  # Перевірка перетину прямокутників
-                        # Додаткова перевірка для точнішого визначення колізії
-                        overlap_rect = player.rect.clip(enemy.rect)  # Отримуємо область перетину
-                        if overlap_rect.width > 0 and overlap_rect.height > 0:  # Якщо є реальне перетинання
-                            enemy.attack(player)  # Виклик атаки ворога
+            # Перевірка колізії з NPC типу 'Enter' або 'Teleport'
+            for npc in npcs:
+                if player.rect.colliderect(npc.rect):  # Перевірка перетину прямокутників
+                    if npc.type == 'enter' and not level_transitioning:
+                        print("Завантаження рівня level1...")
+                        level_transitioning = True  # Уникаємо повторного завантаження
+                        level_path = LEVELS_DIR / "level1.lvl"  # Змінюємо шлях до нового рівня
+                        # Додано: Оновлюємо level_path перед завантаженням музики
+                        level_data = parse_level_file(level_path)  # Завантажуємо новий рівень
+                        
+                        # Визначаємо, яку музику потрібно відтворити
+                        if level_path == LEVELS_DIR / "level0.lvl":
+                            music_file = str(ASSETS_DIR / "audio" / "start_loc_bg2.wav")
+                            level_key = "level0"
+                        elif level_path == LEVELS_DIR / "level1.lvl":
+                            music_file = str(ASSETS_DIR / "audio" / "menu2.wav")
+                            level_key = "level1"
+                        else:
+                            music_file = None
+                            level_key = None
 
-                # Перевірка колізії з NPC типу 'Enter' або 'Teleport'
-                for npc in npcs:
-                    if player.rect.colliderect(npc.rect):  # Перевірка перетину прямокутників
-                        if npc.type == 'enter' and not level_transitioning:
-                            print("Завантаження рівня level1...")
-                            level_transitioning = True  # Уникаємо повторного завантаження
-                            level_path = LEVELS_DIR / "level1.lvl"  # Змінюємо шлях до нового рівня
-                            # Додано: Оновлюємо level_path перед завантаженням музики
-                            level_data = parse_level_file(level_path)  # Завантажуємо новий рівень
-                            
-                            # Визначаємо, яку музику потрібно відтворити
-                            if level_path == LEVELS_DIR / "level0.lvl":
-                                music_file = str(ASSETS_DIR / "audio" / "start_loc_bg2.wav")
-                                level_key = "level0"
-                            elif level_path == LEVELS_DIR / "level1.lvl":
-                                music_file = str(ASSETS_DIR / "audio" / "menu2.wav")
-                                level_key = "level1"
-                            else:
-                                music_file = None
-                                level_key = None
+                        # Виводимо інформацію для налагодження
+                        print(f"level_path: {level_path}")
+                        print(f"music_file: {music_file}")
+                        print(f"current_music: {current_music}")
 
-                            # Виводимо інформацію для налагодження
-                            print(f"level_path: {level_path}")
-                            print(f"music_file: {music_file}")
-                            print(f"current_music: {current_music}")
+                        # Перевіряємо, чи існує файл
+                        if music_file and not Path(music_file).exists():
+                            print(f"Помилка: Файл {music_file} не знайдено!")
+                            music_file = None  # Щоб не було спроб відтворення
 
-                            # Перевіряємо, чи існує файл
-                            if music_file and not Path(music_file).exists():
-                                print(f"Помилка: Файл {music_file} не знайдено!")
-                                music_file = None  # Щоб не було спроб відтворення
+                        # Відтворюємо музику, якщо вона змінилася
+                        if music_file and current_music != level_key:
+                            stop_music()
+                            play_music(music_file)
+                            current_music = level_key
 
-                            # Відтворюємо музику, якщо вона змінилася
-                            if music_file and current_music != level_key:
-                                stop_music()
-                                play_music(music_file)
-                                current_music = level_key
+                        if level_data is None:
+                            print("Завантаження даних рівня")
+                            level_data = parse_level_file(level_path)
 
-                            if level_data is None:
-                                print("Завантаження даних рівня")
-                                level_data = parse_level_file(level_path)
+                        if level_data['player_start'] is None:
+                            print("Помилка: Початкова позиція гравця не визначена у файлі рівня.")
+                            running = False
+                            break
 
-                            if level_data['player_start'] is None:
-                                print("Помилка: Початкова позиція гравця не визначена у файлі рівня.")
-                                running = False
-                                break
+                        player = Player(
+                            (level_data['player_start'][0] * TILE_SIZE, level_data['player_start'][1] * TILE_SIZE),
+                            {
+                                "player_left": textures["player_left"],
+                                "player_right": textures["player_right"],
+                                "player_back_left": textures.get("player_back_left", textures["player_left"]),
+                                "player_back_right": textures.get("player_back_right", textures["player_right"])
+                            }
+                        )
+                        
+                        # Функція для визначення текстури блоку залежно від оточення
+                        def determine_block_texture(x, y, blocks_set):
+                            """
+                            Визначає текстуру блоку залежно від його оточення.
 
-                            player = Player(
-                                (level_data['player_start'][0] * TILE_SIZE, level_data['player_start'][1] * TILE_SIZE),
-                                {
-                                    "player_left": textures["player_left"],
-                                    "player_right": textures["player_right"],
-                                    "player_back_left": textures.get("player_back_left", textures["player_left"]),
-                                    "player_back_right": textures.get("player_back_right", textures["player_right"])
-                                }
+                            :param x: Координата X блоку
+                            :param y: Координата Y блоку
+                            :param blocks_set: Набір координат усіх блоків
+                            :return: Відповідна текстура блоку
+                            """
+                            has_left = (x - 1, y) in blocks_set
+                            has_right = (x + 1, y) in blocks_set
+                            has_top = (x, y - 1) in blocks_set
+                            has_bottom = (x, y + 1) in blocks_set
+
+                            # Найбільш специфічні умови
+                            if has_left and has_right and has_top and has_bottom:
+                                return textures['wall']
+                            if has_left and has_right and has_top:
+                                return textures['wall_bottom']
+                            if has_left and has_right and has_bottom:
+                                return textures['wall_top']
+                            if has_top and has_bottom and has_left:
+                                return textures['wall_right']
+                            if has_top and has_bottom and has_right:
+                                return textures['wall_left']
+
+                            # Менш специфічні умови
+                            if has_left and has_right:
+                                return textures['wall_top_bottom']
+                            if has_top and has_bottom:
+                                return textures['wall_left_right']
+                            if has_top and has_left:
+                                return textures['wall_right_bottom']
+                            if has_top and has_right:
+                                return textures['wall_left_bottom']
+                            if has_bottom and has_left:
+                                return textures['wall_right_top']
+                            if has_bottom and has_right:
+                                return textures['wall_left_top']
+
+                            # Найменш специфічні умови
+                            if has_top:
+                                return textures['wall_left_right_bottom']
+                            if has_bottom:
+                                return textures['wall_left_right_top']
+                            if has_left:
+                                return textures['wall_right_top_bottom']
+                            if has_right:
+                                return textures['wall_left_top_bottom']
+
+                            # Якщо немає сусідів
+                            return textures['wall_block']
+
+                        # Створення набору координат блоків для швидкого доступу
+                        blocks_set = {(block['x'], block['y']) for block in level_data['blocks']}
+
+                        blocks = [
+                            Block(
+                                block['x'] * TILE_SIZE,
+                                block['y'] * TILE_SIZE,
+                                block['is_solid'],
+                                determine_tree_texture(block['x'], block['y'], blocks_set, textures) if level_path.name == "level0.lvl" else determine_block_texture(block['x'], block['y'], blocks_set)
                             )
-                            
-                            # Функція для визначення текстури блоку залежно від оточення
-                            def determine_block_texture(x, y, blocks_set):
-                                """
-                                Визначає текстуру блоку залежно від його оточення.
+                            for block in level_data['blocks']
+                        ]
 
-                                :param x: Координата X блоку
-                                :param y: Координата Y блоку
-                                :param blocks_set: Набір координат усіх блоків
-                                :return: Відповідна текстура блоку
-                                """
-                                has_left = (x - 1, y) in blocks_set
-                                has_right = (x + 1, y) in blocks_set
-                                has_top = (x, y - 1) in blocks_set
-                                has_bottom = (x, y + 1) in blocks_set
+                        # Завантаження текстур ворогів
+                        enemy_textures = {
+                            "zombie_left": textures["zombie_left"],
+                            "zombie_right": textures["zombie_right"],
+                            "zombie_back_left": textures["zombie_back_left"],
+                            "zombie_back_right": textures["zombie_back_right"],
+                            "skeleton_left": textures["skeleton_left"],
+                            "skeleton_right": textures["skeleton_right"],
+                            "skeleton_back_left": textures["skeleton_back_left"],
+                            "skeleton_back_right": textures["skeleton_back_right"],
+                            "boss_left": textures["boss_left"],
+                            "boss_right": textures["boss_right"],
+                            "boss_back_left": textures["boss_back_left"],
+                            "boss_back_right": textures["boss_back_right"],
+                        }
 
-                                # Найбільш специфічні умови
-                                if has_left and has_right and has_top and has_bottom:
-                                    return textures['wall']
-                                if has_left and has_right and has_top:
-                                    return textures['wall_bottom']
-                                if has_left and has_right and has_bottom:
-                                    return textures['wall_top']
-                                if has_top and has_bottom and has_left:
-                                    return textures['wall_right']
-                                if has_top and has_bottom and has_right:
-                                    return textures['wall_left']
+                        # Мапінг типів ворогів із файлу рівня до ключів у словнику текстур
+                        enemies = [
+                            Enemy(
+                                enemy['x'], enemy['y'], enemy_type_mapping.get(enemy['type'], 'zombie_left'), enemy_textures,
+                                health={
+                                    'zombie': 1,
+                                    'skeleton': 3,
+                                    'boss': 5
+                                }.get(enemy_type_mapping.get(enemy['type'], 'zombie_left'), 1)  # Значення здоров'я за замовчуванням — 1
+                            ) for enemy in level_data['enemies']
+                        ]
+                        items = [
+                            Item(item['x'] * TILE_SIZE, item['y'] * TILE_SIZE, item.get('is_solid', True), textures['item_frames'])
+                            for item in level_data['items']
+                        ]
+                        # Оновлення ключів у statue_type_mapping
+                        statue_type_mapping = {f"statue{key}": value for key, value in statue_type_mapping.items()}
 
-                                # Менш специфічні умови
-                                if has_left and has_right:
-                                    return textures['wall_top_bottom']
-                                if has_top and has_bottom:
-                                    return textures['wall_left_right']
-                                if has_top and has_left:
-                                    return textures['wall_right_bottom']
-                                if has_top and has_right:
-                                    return textures['wall_left_bottom']
-                                if has_bottom and has_left:
-                                    return textures['wall_right_top']
-                                if has_bottom and has_right:
-                                    return textures['wall_left_top']
+                        # Перевірка оновлених ключів
+                        print(f"Оновлені ключі в statue_type_mapping: {list(statue_type_mapping.keys())}")
 
-                                # Найменш специфічні умови
-                                if has_top:
-                                    return textures['wall_left_right_bottom']
-                                if has_bottom:
-                                    return textures['wall_left_right_top']
-                                if has_left:
-                                    return textures['wall_right_top_bottom']
-                                if has_right:
-                                    return textures['wall_left_top_bottom']
-
-                                # Якщо немає сусідів
-                                return textures['wall_block']
-
-                            # Створення набору координат блоків для швидкого доступу
-                            blocks_set = {(block['x'], block['y']) for block in level_data['blocks']}
-
-                            blocks = [
-                                Block(
-                                    block['x'] * TILE_SIZE,
-                                    block['y'] * TILE_SIZE,
-                                    block['is_solid'],
-                                    determine_tree_texture(block['x'], block['y'], blocks_set, textures) if level_path.name == "level0.lvl" else determine_block_texture(block['x'], block['y'], blocks_set)
-                                )
-                                for block in level_data['blocks']
-                            ]
-
-                            # Завантаження текстур ворогів
-                            enemy_textures = {
-                                "zombie_left": textures["zombie_left"],
-                                "zombie_right": textures["zombie_right"],
-                                "zombie_back_left": textures["zombie_back_left"],
-                                "zombie_back_right": textures["zombie_back_right"],
-                                "skeleton_left": textures["skeleton_left"],
-                                "skeleton_right": textures["skeleton_right"],
-                                "skeleton_back_left": textures["skeleton_back_left"],
-                                "skeleton_back_right": textures["skeleton_back_right"],
-                                "boss_left": textures["boss_left"],
-                                "boss_right": textures["boss_right"],
-                                "boss_back_left": textures["boss_back_left"],
-                                "boss_back_right": textures["boss_back_right"],
-                            }
-
-                            # Мапінг типів ворогів із файлу рівня до ключів у словнику текстур
-                            enemies = [
-                                Enemy(
-                                    enemy['x'], enemy['y'], enemy_type_mapping.get(enemy['type'], 'zombie_left'), enemy_textures,
-                                    health={
-                                        'zombie': 1,
-                                        'skeleton': 3,
-                                        'boss': 5
-                                    }.get(enemy_type_mapping.get(enemy['type'], 'zombie_left'), 1)  # Значення здоров'я за замовчуванням — 1
-                                ) for enemy in level_data['enemies']
-                            ]
-                            items = [
-                                Item(item['x'] * TILE_SIZE, item['y'] * TILE_SIZE, item.get('is_solid', True), textures['item_frames'])
-                                for item in level_data['items']
-                            ]
-                            # Оновлення ключів у statue_type_mapping
-                            statue_type_mapping = {f"statue{key}": value for key, value in statue_type_mapping.items()}
-
-                            # Перевірка оновлених ключів
-                            print(f"Оновлені ключі в statue_type_mapping: {list(statue_type_mapping.keys())}")
-
-                            statues = [
-                                IntStat(
-                                    statue['x'] * TILE_SIZE,
-                                    statue['y'] * TILE_SIZE,
-                                    statue.get('is_solid', True),
-                                    f"statue{statue['type']}",
-                                    textures
-                                )
-                                for statue in level_data['statues']
-                            ]
-                            npcs = [
-                                Npc(
-                                    npc['x'] * TILE_SIZE,
-                                    npc['y'] * TILE_SIZE,
-                                    npc_type_mapping.get(npc['type'], 'teleport'), {
-                                        'enter': textures['enter'],
-                                        'teleport': textures['teleport']
-                                    }
-                                ) for npc in level_data['npc']
-                            ]
-                            camera = Camera(level_data['width'] * TILE_SIZE, level_data['height'] * TILE_SIZE)  # Оновлюємо камеру
-                            background_grid = generate_background_grid(textures, level_data, level_path.name)  # Передаємо назву рівня
-                            level_transitioning = False  # Скидаємо прапор після завершення переходу
-                            break  # Виходимо з перевірки колізій, але залишаємося в режимі рівня
-                        elif npc.type == 'teleport' and not level_transitioning:
-                            print("Телепортація на рівень level0...")
-                            level_transitioning = True  # Уникаємо повторного завантаження
-                            level_path = LEVELS_DIR / "level0.lvl"  # Повертаємося на level0
-                            level_data = parse_level_file(level_path)  # Завантажуємо level0
-                            player = Player(
-                                (level_data['player_start'][0] * TILE_SIZE, level_data['player_start'][1] * TILE_SIZE),  # Встановлення позиції гравця
-                                {
-                                    "player_left": textures["player_left"],
-                                    "player_right": textures["player_right"],
-                                    "player_back_left": textures.get("player_back_left", textures["player_left"]),
-                                    "player_back_right": textures.get("player_back_right", textures["player_right"])
+                        statues = [
+                            IntStat(
+                                statue['x'] * TILE_SIZE,
+                                statue['y'] * TILE_SIZE,
+                                statue.get('is_solid', True),
+                                f"statue{statue['type']}",
+                                textures
+                            )
+                            for statue in level_data['statues']
+                        ]
+                        npcs = [
+                            Npc(
+                                npc['x'] * TILE_SIZE,
+                                npc['y'] * TILE_SIZE,
+                                npc_type_mapping.get(npc['type'], 'teleport'), {
+                                    'enter': textures['enter'],
+                                    'teleport': textures['teleport']
                                 }
-                            )  # Переміщуємо гравця на стартову позицію level0
-                            blocks_set = {(block['x'], block['y']) for block in level_data['blocks']}
-                            blocks = [
-                                Block(
-                                    block['x'] * TILE_SIZE,
-                                    block['y'] * TILE_SIZE,
-                                    block['is_solid'],
-                                    determine_tree_texture(block['x'], block['y'], blocks_set, textures) if level_path.name == "level0.lvl" else determine_block_texture(block['x'], block['y'], blocks_set)
-                                )
-                                for block in level_data['blocks']
-                            ]
-                            # Завантаження текстур ворогів
-                            enemy_textures = {
-                                "zombie_left": textures["zombie_left"],
-                                "zombie_right": textures["zombie_right"],
-                                "zombie_back_left": textures["zombie_back_left"],
-                                "zombie_back_right": textures["zombie_back_right"],
-                                "skeleton_left": textures["skeleton_left"],
-                                "skeleton_right": textures["skeleton_right"],
-                                "skeleton_back_left": textures["skeleton_back_left"],
-                                "skeleton_back_right": textures["skeleton_back_right"],
-                                "boss_left": textures["boss_left"],
-                                "boss_right": textures["boss_right"],
-                                "boss_back_left": textures["boss_back_left"],
-                                "boss_back_right": textures["boss_back_right"],
+                            ) for npc in level_data['npc']
+                        ]
+                        camera = Camera(level_data['width'] * TILE_SIZE, level_data['height'] * TILE_SIZE)  # Оновлюємо камеру
+                        background_grid = generate_background_grid(textures, level_data, level_path.name)  # Передаємо назву рівня
+                        level_transitioning = False  # Скидаємо прапор після завершення переходу
+                        break  # Виходимо з перевірки колізій, але залишаємося в режимі рівня
+                    elif npc.type == 'teleport' and not level_transitioning:
+                        print("Телепортація на рівень level0...")
+                        level_transitioning = True  # Уникаємо повторного завантаження
+                        level_path = LEVELS_DIR / "level0.lvl"  # Повертаємося на level0
+                        level_data = parse_level_file(level_path)  # Завантажуємо level0
+                        player = Player(
+                            (level_data['player_start'][0] * TILE_SIZE, level_data['player_start'][1] * TILE_SIZE),  # Встановлення позиції гравця
+                            {
+                                "player_left": textures["player_left"],
+                                "player_right": textures["player_right"],
+                                "player_back_left": textures.get("player_back_left", textures["player_left"]),
+                                "player_back_right": textures.get("player_back_right", textures["player_right"])
                             }
+                        )  # Переміщуємо гравця на стартову позицію level0
+                        blocks_set = {(block['x'], block['y']) for block in level_data['blocks']}
+                        blocks = [
+                            Block(
+                                block['x'] * TILE_SIZE,
+                                block['y'] * TILE_SIZE,
+                                block['is_solid'],
+                                determine_tree_texture(block['x'], block['y'], blocks_set, textures) if level_path.name == "level0.lvl" else determine_block_texture(block['x'], block['y'], blocks_set)
+                            )
+                            for block in level_data['blocks']
+                        ]
+                        # Завантаження текстур ворогів
+                        enemy_textures = {
+                            "zombie_left": textures["zombie_left"],
+                            "zombie_right": textures["zombie_right"],
+                            "zombie_back_left": textures["zombie_back_left"],
+                            "zombie_back_right": textures["zombie_back_right"],
+                            "skeleton_left": textures["skeleton_left"],
+                            "skeleton_right": textures["skeleton_right"],
+                            "skeleton_back_left": textures["skeleton_back_left"],
+                            "skeleton_back_right": textures["skeleton_back_right"],
+                            "boss_left": textures["boss_left"],
+                            "boss_right": textures["boss_right"],
+                            "boss_back_left": textures["boss_back_left"],
+                            "boss_back_right": textures["boss_back_right"],
+                        }
 
-                            # Мапінг типів ворогів із файлу рівня до ключів у словнику текстур
-                            enemies = [
-                                Enemy(
-                                    enemy['x'], enemy['y'], enemy_type_mapping.get(enemy['type'], 'zombie_left'), enemy_textures,
-                                    health={
-                                        'zombie': 1,
-                                        'skeleton': 3,
-                                        'boss': 5
-                                    }.get(enemy_type_mapping.get(enemy['type'], 'zombie_left'), 1)  # Значення здоров'я за замовчуванням — 1
-                                ) for enemy in level_data['enemies']
-                            ]
-                            items = [
-                                Item(item['x'] * TILE_SIZE, item['y'] * TILE_SIZE, item.get('is_solid', True), textures['item_frames'])
-                                for item in level_data['items']
-                            ]
-                            # Оновлення ключів у statue_type_mapping
-                            statue_type_mapping = {f"statue{key}": value for key, value in statue_type_mapping.items()}
+                        # Мапінг типів ворогів із файлу рівня до ключів у словнику текстур
+                        enemies = [
+                            Enemy(
+                                enemy['x'], enemy['y'], enemy_type_mapping.get(enemy['type'], 'zombie_left'), enemy_textures,
+                                health={
+                                    'zombie': 1,
+                                    'skeleton': 3,
+                                    'boss': 5
+                                }.get(enemy_type_mapping.get(enemy['type'], 'zombie_left'), 1)  # Значення здоров'я за замовчуванням — 1
+                            ) for enemy in level_data['enemies']
+                        ]
+                        items = [
+                            Item(item['x'] * TILE_SIZE, item['y'] * TILE_SIZE, item.get('is_solid', True), textures['item_frames'])
+                            for item in level_data['items']
+                        ]
+                        # Оновлення ключів у statue_type_mapping
+                        statue_type_mapping = {f"statue{key}": value for key, value in statue_type_mapping.items()}
 
-                            # Перевірка оновлених ключів
-                            print(f"Оновлені ключі в statue_type_mapping: {list(statue_type_mapping.keys())}")
+                        # Перевірка оновлених ключів
+                        print(f"Оновлені ключі в statue_type_mapping: {list(statue_type_mapping.keys())}")
 
-                            statues = [
-                                IntStat(
-                                    statue['x'] * TILE_SIZE,
-                                    statue['y'] * TILE_SIZE,
-                                    statue.get('is_solid', True),
-                                    f"statue{statue['type']}",
-                                    textures
-                                )
-                                for statue in level_data['statues']
-                            ]
-                            npcs = [
-                                Npc(
-                                    npc['x'] * TILE_SIZE,
-                                    npc['y'] * TILE_SIZE,
-                                    npc_type_mapping.get(npc['type'], 'teleport'), {
-                                        'enter': textures['enter'],
-                                        'teleport': textures['teleport']
-                                    }
-                                ) for npc in level_data['npc']
-                            ]
-                            camera = Camera(level_data['width'] * TILE_SIZE, level_data['height'] * TILE_SIZE)  # Оновлюємо камеру
-                            background_grid = generate_background_grid(textures, level_data, level_path.name)  # Передаємо назву рівня
-                            level_transitioning = False  # Скидаємо прапор після завершення переходу
-                            break  # Виходимо з перевірки колізій, але залишаємося в режимі рівня
+                        statues = [
+                            IntStat(
+                                statue['x'] * TILE_SIZE,
+                                statue['y'] * TILE_SIZE,
+                                statue.get('is_solid', True),
+                                f"statue{statue['type']}",
+                                textures
+                            )
+                            for statue in level_data['statues']
+                        ]
+                        npcs = [
+                            Npc(
+                                npc['x'] * TILE_SIZE,
+                                npc['y'] * TILE_SIZE,
+                                npc_type_mapping.get(npc['type'], 'teleport'), {
+                                    'enter': textures['enter'],
+                                    'teleport': textures['teleport']
+                                }
+                            ) for npc in level_data['npc']
+                        ]
+                        camera = Camera(level_data['width'] * TILE_SIZE, level_data['height'] * TILE_SIZE)  # Оновлюємо камеру
+                        background_grid = generate_background_grid(textures, level_data, level_path.name)  # Передаємо назву рівня
+                        level_transitioning = False  # Скидаємо прапор після завершення переходу
+                        break  # Виходимо з перевірки колізій, але залишаємося в режимі рівня
 
             pygame.display.flip()
 
 # Додано: змінна для стану меню налаштувань
 showing_settings = False
-
-# Розташування кнопок на зображенні налаштувань
-settings_button_positions = {
-    "back": (SCREEN_WIDTH // 2 - 689, SCREEN_HEIGHT // 2 + 225),
-    "default": (SCREEN_WIDTH // 2 - 337, SCREEN_HEIGHT // 2 + 225),
-    "save_back": (SCREEN_WIDTH // 2 + 30, SCREEN_HEIGHT // 2 + 225),
-    "save": (SCREEN_WIDTH // 2 + 382, SCREEN_HEIGHT // 2 + 225),
-}
-
-# Завантаження зображення для меню налаштувань
-try:
-    settings_menu_image = pygame.image.load(str(INTERFACE_DIR / "settings_menu.png"))
-    settings_menu_buttons = pygame.image.load(str(INTERFACE_DIR / "button.png"))
-except pygame.error as e:
-    print(f"Помилка завантаження зображення меню налаштувань: {e}")
-    sys.exit()
-
-settings_menu_rect = settings_menu_image.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2))  # Центрування зображення
-
-def render_settings_menu(screen, settings_menu_image, settings_menu_buttons, settings_button_positions, title_font, font, menu_font):
-    """
-    Малює вікно налаштувань та кнопки на екрані.
-    """
-    # Відображення зображення налаштувань поверх гри
-    screen.blit(settings_menu_image, settings_menu_rect)
-
-    # Додавання тексту "Налаштування" зверху
-    settings_text = title_font.render("Налаштування", True, (255, 255, 255))  # Білий текст
-    settings_text_rect = settings_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 300))
-    screen.blit(settings_text, settings_text_rect)
-
-    # Відображення кнопок налаштувань
-    for button_name, button_pos in settings_button_positions.items():
-        screen.blit(settings_menu_buttons, button_pos)
-
-        # Додавання тексту поверх кнопок
-        button_text = menu_font.render({
-            "back": "Закрити",
-            "default": "Скинути налаштування",
-            "save_back": "Зберегти та закрити",
-            "save": "Зберегти"
-        }[button_name], True, (255, 255, 255))  # Білий текст
-        button_text_rect = button_text.get_rect(center=(button_pos[0] + settings_menu_buttons.get_width() // 2,
-                                                        button_pos[1] + settings_menu_buttons.get_height() // 2))
-        screen.blit(button_text, button_text_rect)
 
 pygame.quit()
 print("Програма завершена")  # Додано: журнал для перевірки завершення програми
