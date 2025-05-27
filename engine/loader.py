@@ -82,7 +82,7 @@ def load_textures():
             "statue5": pygame.image.load(str(STATUE_DIR / "statue20.png")).convert_alpha(),
             "statue6": pygame.image.load(str(STATUE_DIR / "statue30.png")).convert_alpha(),
             "statue7": pygame.image.load(str(STATUE_DIR / "statue40.png")).convert_alpha(),
-            "statue8": pygame.image.load(str(STATUE_DIR / "statue20.png")).convert_alpha(),
+            "statue8": pygame.image.load(str(STATUE_DIR / "statue50.png")).convert_alpha(),
                         
         }
         # Перевірка наявності текстур
