@@ -1,6 +1,6 @@
 {
-    "volume": 26,
+    "volume": 66,
     "fullscreen": false,
-    "hints": false,
-    "level_select": true
+    "hints": true,
+    "level_select": false
 }
