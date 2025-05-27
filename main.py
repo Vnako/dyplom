@@ -31,10 +31,11 @@ GRASS_DIR = ASSETS_DIR / "img" / "start_loc" / "grass"
 LEVELS_DIR = BASE_DIR / "levels"
 
 # Завантаження кадрів GIF
-def load_gif_frames(folder_path):
+def load_gif_frames(folder_path, scale=None):
     """
     Завантажує всі кадри GIF із вказаної папки.
     :param folder_path: Шлях до папки з кадрами GIF
+    :param scale: (width, height) або None
     :return: Список кадрів (поверхонь Pygame)
     """
     frames = []
@@ -44,8 +45,10 @@ def load_gif_frames(folder_path):
         sys.exit()
 
     for filename in sorted(absolute_path.iterdir()):
-        if filename.suffix == ".png":  # Завантажуємо лише PNG-файли
-            frame = pygame.image.load(str(filename))
+        if filename.suffix == ".png":
+            frame = pygame.image.load(str(filename)).convert_alpha()
+            if scale is not None:
+                frame = pygame.transform.smoothscale(frame, scale)
             frames.append(frame)
 
     if not frames:
@@ -54,11 +57,9 @@ def load_gif_frames(folder_path):
 
     return frames
 
-# Завантаження кадрів GIF
-gif_frames = load_gif_frames(INTERFACE_DIR / "mainmenu_frames")
-current_frame = 0
-frame_delay = 10  # Кількість кадрів між зміною зображення
-frame_counter = 0
+# --- Глобальні змінні для масштабованих зображень ---
+GIF_FRAME_SIZE = (SCREEN_WIDTH, SCREEN_HEIGHT)
+ROTATING_IMAGE_SIZE = (SCREEN_HEIGHT, SCREEN_HEIGHT)  # квадрат, кожна сторона = висота екрана
 
 # Завантаження шрифту
 try:
@@ -68,7 +69,7 @@ try:
 except FileNotFoundError as e:
     print(f"Помилка завантаження шрифту: {e}")
     sys.exit()
-
+    
 # Завантаження зображення стрілки
 try:
     arrow_image = pygame.image.load(str(INTERFACE_DIR / "arrow.png"))
@@ -76,14 +77,32 @@ except pygame.error as e:
     print(f"Помилка завантаження зображення стрілки: {e}")
     sys.exit()
 
-# Завантаження зображення для обертання
+# --- Функція для оновлення масштабованих зображень при зміні розміру ---
+def update_scaled_images():
+    global gif_frames, rotating_image, rotating_image_rect
+    gif_frames = load_gif_frames(INTERFACE_DIR / "mainmenu_frames", scale=(screen.get_width(), screen.get_height()))
+    try:
+        # Масштабуємо rotating_image як квадрат: сторона = висота екрана
+        side = screen.get_height()
+        rotating_image_raw = pygame.image.load(str(INTERFACE_DIR / "mainmaenu_particles.png")).convert_alpha()
+        rotating_image_scaled = pygame.transform.smoothscale(rotating_image_raw, (side, side))
+        rotating_image_rect = rotating_image_scaled.get_rect(center=(screen.get_width() // 2 + 200, screen.get_height() // 2))
+        return rotating_image_scaled
+    except pygame.error as e:
+        print(f"Помилка завантаження зображення для обертання: {e}")
+        sys.exit()
+
+# --- Ініціалізація масштабованих зображень ---
+gif_frames = load_gif_frames(INTERFACE_DIR / "mainmenu_frames", scale=GIF_FRAME_SIZE)
 try:
-    rotating_image = pygame.image.load(str(INTERFACE_DIR / "mainmaenu_particles.png"))
+    # Масштабуємо rotating_image як квадрат: сторона = висота екрана
+    side = SCREEN_HEIGHT
+    rotating_image_raw = pygame.image.load(str(INTERFACE_DIR / "mainmaenu_particles.png")).convert_alpha()
+    rotating_image = pygame.transform.smoothscale(rotating_image_raw, (side, side))
 except pygame.error as e:
     print(f"Помилка завантаження зображення для обертання: {e}")
     sys.exit()
-
-rotating_image_rect = rotating_image.get_rect(center=(SCREEN_WIDTH // 2 + 200, SCREEN_HEIGHT // 2))  # Зміщено на 100 пікселів вправо
+rotating_image_rect = rotating_image.get_rect(center=(SCREEN_WIDTH // 2 + 200, SCREEN_HEIGHT // 2))
 rotation_angle = 0  # Початковий кут обертання
 
 # Завантаження текстур
@@ -96,7 +115,8 @@ level_data = None  # Рівень буде завантажено після н�
 
 # Текстові елементи
 menu_items = ["Нова гра", "Збереження", "Налаштування", "Вихід"]
-menu_positions = [(SCREEN_WIDTH // 2 - 800, 450), (SCREEN_WIDTH // 2 - 800, 560), (SCREEN_WIDTH // 2 - 800, 670), (SCREEN_WIDTH // 2 - 800, 780)]  # Вирівнювання по лівому краю
+MENU_X = int(SCREEN_WIDTH * 0.07)
+menu_positions = [(MENU_X, 450), (MENU_X, 560), (MENU_X, 670), (MENU_X, 780)]  # Вирівнювання по лівому краю
 
 # Завантаження зображення паузи
 try:
@@ -502,6 +522,10 @@ pressed_keys = set()
 def debug_state():
     print(f"showing_menu={showing_menu}, showing_level={showing_level}, showing_settings={showing_settings}, is_paused={is_paused}")
 
+current_frame = 0
+frame_delay = 10  # Кількість кадрів між зміною зображення
+frame_counter = 0
+
 while running:
     clock.tick(60)
     if showing_menu:
@@ -530,7 +554,7 @@ while running:
         screen.blit(gif_frames[current_frame], (0, 0))
         frame_counter += 1
         if frame_counter >= frame_delay:
-            current_frame = (current_frame + 1) % len(gif_frames)  # Перехід до наступного кадру
+            current_frame = (current_frame + 1) % len(gif_frames)
             frame_counter = 0
 
         # Обертання зображення
@@ -541,15 +565,15 @@ while running:
 
         # Відображення назви гри
         title_text = title_font.render("Slime Quest: Dungeon", True, (255, 255, 255))  # Білий колір
-        title_rect = title_text.get_rect(center=(SCREEN_WIDTH // 2 - 400, 300))  # Центрування по горизонталі
+        title_rect = title_text.get_rect(topleft=(MENU_X, 150))  # 10% від лівого краю
         screen.blit(title_text, title_rect)
 
         # Відображення тексту
-        text_rects = []  # Зберігаємо прямокутники тексту для перевірки кліків
+        text_rects = []
         for i, text in enumerate(menu_items):
-            rendered_text = font.render(text, True, (255, 255, 255))  # Білий колір
-            text_rect = rendered_text.get_rect(topleft=menu_positions[i])  # Вирівнювання по лівому краю
-            text_rects.append((text, text_rect))  # Зберігаємо текст і його прямокутник
+            rendered_text = font.render(text, True, (255, 255, 255))
+            text_rect = rendered_text.get_rect(topleft=menu_positions[i])
+            text_rects.append((text, text_rect))
             screen.blit(rendered_text, text_rect)
 
         # Отримання позиції миші
