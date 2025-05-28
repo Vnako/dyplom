@@ -8,7 +8,7 @@ from PyQt5.QtWidgets import QDesktopWidget
 from editor_logic import load_level, save_edit, update_level_table, fill_with_spaces, save_table_to_file
 
 BASE_DIR = Path(__file__).resolve().parent
-ASSETS_DIR = BASE_DIR / "cli_assets"
+ASSETS_DIR = BASE_DIR / "cli" / "cli_assets"
 
 class LevelEditorApp(QWidget):
     def __init__(self):
