@@ -3,7 +3,11 @@ import sys
 import json
 import os
 from pathlib import Path
-from engine.loader import load_textures, generate_background_grid, determine_tree_texture, render_background, enemy_type_mapping, npc_type_mapping, statue_type_mapping, load_grass_textures
+from engine.loader import (
+    load_textures, generate_background_grid, determine_tree_texture, render_background,
+    enemy_type_mapping, npc_type_mapping, statue_type_mapping, load_grass_textures,
+    draw_player_gems  # Додати імпорт draw_player_gems
+)
 from engine.parser import parse_level_file
 from engine.entities import Player, Block, Enemy, Item, Npc, Camera, IntStat
 import tkinter as tk
@@ -55,6 +59,8 @@ except pygame.error as e:
 # --- Функція для оновлення масштабованих зображень при зміні розміру ---
 def update_scaled_images():
     global mainmenu_bg, rotating_image, rotating_image_rect
+    global pause_menu_image, pause_menu_buttons, settings_menu_image, settings_menu_buttons, arrow_image
+
     # Оновлення фонового зображення
     try:
         mainmenu_bg = pygame.image.load(str(INTERFACE_DIR / "mainmenu.png")).convert_alpha()
@@ -63,18 +69,57 @@ def update_scaled_images():
         print(f"Помилка завантаження фонового зображення: {e}")
         sys.exit()
 
-try:
-    # Масштабуємо rotating_image як квадрат: сторона = висота екрана
-    side = SCREEN_HEIGHT
-    rotating_image_raw = pygame.image.load(str(INTERFACE_DIR / "mainmaenu_particles.png")).convert_alpha()
-    rotating_image = pygame.transform.smoothscale(rotating_image_raw, (side, side))
-except pygame.error as e:
-    print(f"Помилка завантаження зображення для обертання: {e}")
-    sys.exit()
-rotating_image_rect = rotating_image.get_rect(center=(SCREEN_WIDTH * 0.63, SCREEN_HEIGHT // 2))
-rotation_angle = 0  # Початковий кут обертання
+    # Оновлення зображення частинок
+    try:
+        side = screen.get_height()
+        rotating_image_raw = pygame.image.load(str(INTERFACE_DIR / "mainmaenu_particles.png")).convert_alpha()
+        rotating_image = pygame.transform.smoothscale(rotating_image_raw, (side, side))
+        rotating_image_rect = rotating_image.get_rect(center=(screen.get_width() * 0.63, screen.get_height() // 2))
+    except pygame.error as e:
+        print(f"Помилка завантаження зображення для обертання: {e}")
+        sys.exit()
 
-# Завантаження текстур
+    # Оновлення зображення паузи
+    try:
+        pause_menu_image = pygame.image.load(str(INTERFACE_DIR / "menu.png")).convert_alpha()
+        # Масштабування не застосовується, якщо не потрібно
+    except pygame.error as e:
+        print(f"Помилка завантаження зображення паузи: {e}")
+        sys.exit()
+
+    # Оновлення зображення кнопок паузи
+    try:
+        pause_menu_buttons = pygame.image.load(str(INTERFACE_DIR / "button.png")).convert_alpha()
+        # Масштабування не застосовується, якщо не потрібно
+    except pygame.error as e:
+        print(f"Помилка завантаження зображення кнопок паузи: {e}")
+        sys.exit()
+
+    # Оновлення зображення меню налаштувань
+    try:
+        settings_menu_image = pygame.image.load(str(INTERFACE_DIR / "settings_menu.png")).convert_alpha()
+        # Масштабування не застосовується, якщо не потрібно
+    except pygame.error as e:
+        print(f"Помилка завантаження зображення меню налаштувань: {e}")
+        sys.exit()
+
+    # Оновлення зображення кнопок меню налаштувань
+    try:
+        settings_menu_buttons = pygame.image.load(str(INTERFACE_DIR / "button.png")).convert_alpha()
+        # Масштабування не застосовується, якщо не потрібно
+    except pygame.error as e:
+        print(f"Помилка завантаження зображення кнопок меню налаштувань: {e}")
+        sys.exit()
+
+    # Оновлення зображення стрілки
+    try:
+        arrow_image = pygame.image.load(str(INTERFACE_DIR / "arrow.png")).convert_alpha()
+        # Масштабування не застосовується, якщо не потрібно
+    except pygame.error as e:
+        print(f"Помилка завантаження зображення стрілки: {e}")
+        sys.exit()
+
+# --- Завантаження текстур
 textures = load_textures()
 textures.update(load_grass_textures(GRASS_DIR))
 
@@ -169,7 +214,7 @@ def render_volume_slider(screen, current_volume, settings_font):
     """
     slider_x = int(SCREEN_WIDTH * 0.26)
     slider_y = int(SCREEN_HEIGHT * 0.36)
-    slider_width = 400
+    slider_width = int(SCREEN_WIDTH * 0.22)
     slider_height = 10
 
     # Малюємо лінію повзунка
@@ -423,6 +468,8 @@ def create_player(player_start, textures):
     :param textures: словник текстур
     :return: Player instance
     """
+    # Передаємо gem_textures (всі gemXX з textures) у Player
+    gem_textures = {k: v for k, v in textures.items() if k.startswith("gem")}
     return Player(
         (player_start[0] * TILE_SIZE, player_start[1] * TILE_SIZE),
         {
@@ -430,7 +477,8 @@ def create_player(player_start, textures):
             "player_right": textures["player_right"],
             "player_back_left": textures.get("player_back_left", textures["player_left"]),
             "player_back_right": textures.get("player_back_right", textures["player_right"])
-        }
+        },
+        gem_textures=gem_textures  # <-- Додаємо це!
     )
 
 def select_level_file():
@@ -469,6 +517,7 @@ menu1_played = False
 current_music = None
 
 # --- Додаткові змінні для рівня ---
+
 player = None
 blocks = []
 enemies = []
@@ -481,10 +530,6 @@ pressed_keys = set()
 
 def debug_state():
     print(f"showing_menu={showing_menu}, showing_level={showing_level}, showing_settings={showing_settings}, is_paused={is_paused}")
-
-current_frame = 0
-frame_delay = 10  # Кількість кадрів між зміною зображення
-frame_counter = 0
 
 while running:
     clock.tick(60)
@@ -514,7 +559,14 @@ while running:
         screen.blit(mainmenu_bg, (0, 0))
 
         # Обертання зображення
-        rotation_angle = (rotation_angle + 1) % 360  # Збільшуємо кут обертання
+        # --- Ensure rotating_image and rotating_image_rect are initialized ---
+        if 'rotating_image' not in globals() or 'rotating_image_rect' not in globals():
+            update_scaled_images()
+        global rotating_image, rotating_image_rect, rotation_angle
+        try:
+            rotation_angle = (rotation_angle + 1) % 360  # Збільшуємо кут обертання
+        except NameError:
+            rotation_angle = 0
         rotated_image = pygame.transform.rotate(rotating_image, rotation_angle)
         rotated_rect = rotated_image.get_rect(center=rotating_image_rect.center)
         screen.blit(rotated_image, rotated_rect.topleft)
@@ -635,14 +687,13 @@ while running:
                 Item(item['x'] * TILE_SIZE, item['y'] * TILE_SIZE, item.get('is_solid', True), textures['item_frames'])
                 for item in level_data['items']
             ]
-
-            statue_type_mapping = {f"statue{key}": value for key, value in statue_type_mapping.items()}
+            
             statues = [
                 IntStat(
                     statue['x'] * TILE_SIZE,
                     statue['y'] * TILE_SIZE,
                     statue.get('is_solid', True),
-                    f"statue{statue['type']}",
+                    f"statue{statue['type']}0",
                     textures
                 )
                 for statue in level_data['statues']
@@ -772,13 +823,14 @@ while running:
             # Перевірка оновлених ключів
             print(f"Оновлені ключі в statue_type_mapping: {list(statue_type_mapping.keys())}")
 
+            # --- Виправлено: правильне формування ключа для текстури статуї ---
             statues = [
                 IntStat(
                     statue['x'] * TILE_SIZE,
                     statue['y'] * TILE_SIZE,
                     statue.get('is_solid', True),
-                    f"statue{statue['type']}",  # тип як str
-                    textures  # словник текстур
+                    f"statue{statue['type']}0",
+                    textures
                 )
                 for statue in level_data['statues']
             ]
@@ -834,6 +886,10 @@ while running:
         for _, obj in render_objects:
             obj.draw(screen, camera)
 
+        # --- Малюємо геми гравця після гравця ---
+        if player is not None:
+            draw_player_gems(player, screen)
+
         # Якщо меню характеристик увімкнено, малюємо його
         if showing_stats:
             screen.blit(pause_menu_image, pause_menu_rect)  # Відображення зображення меню
@@ -841,11 +897,11 @@ while running:
             stat_text_rect = stat_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 270))
             screen.blit(stat_text, stat_text_rect)
 
-            health_text = menu_font.render(f"Здоров'я: {player.health} (+5)", True, (255, 255, 255))
+            health_text = menu_font.render(f"Здоров'я: {player.health}", True, (255, 255, 255))
             health_text_rect = health_text.get_rect(center=(SCREEN_WIDTH // 2 - 85, SCREEN_HEIGHT // 2 - 150))
             screen.blit(health_text, health_text_rect)
             
-            protection_text = menu_font.render(f"Захист: {player.protection} (+5%)", True, (255, 255, 255))
+            protection_text = menu_font.render(f"Захист: {player.protection}", True, (255, 255, 255))
             protection_text_rect = protection_text.get_rect(center=(SCREEN_WIDTH // 2 - 85, SCREEN_HEIGHT // 2 - 50))
             screen.blit(protection_text, protection_text_rect)
             
@@ -886,6 +942,102 @@ while running:
             elif event.type == pygame.KEYUP:
                 if event.key in pressed_keys:
                     pressed_keys.discard(event.key)
+            elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 3:  # ПКМ
+                mouse_pos = event.pos
+                print(f"[DEBUG] ПКМ координати кліку: {mouse_pos}")
+                clicked_any_statue = False
+                for statue in statues:
+                    statue_screen_rect = camera.apply_rect(statue.rect)
+                    print(f"[DEBUG] Перевірка статуї {statue.type} rect={statue_screen_rect}")
+                    if statue_screen_rect.collidepoint(mouse_pos):
+                        clicked_any_statue = True
+                        print(f"[DEBUG] ПКМ по статуї: {statue.type} at {statue_screen_rect.topleft}")
+                        # Виправлено: базова частина типу статуї (наприклад, 'statue40')
+                        if len(statue.type) >= 7:
+                            base = statue.type[:7]  # 'statue40', 'statue41', ...
+                            try:
+                                num = int(statue.type[7:])
+                            except Exception:
+                                num = 0
+                        else:
+                            base = statue.type
+                            num = 0
+                        # --- Додаємо блокування після 5 кліку/текстури statue*5 ---
+                        if num == 5:
+                            print(f"[DEBUG] Досягнуто останньої текстури {statue.type}, подальше оновлення заблоковано.")
+                            break  # Не оновлюємо більше текстуру
+
+                        # --- Додаємо приховування гемів при кліках по statueXX ---
+                        # Для кожної статуї, приховуємо відповідний гем
+                        statue_gem_map = {
+                            "statue40": "gem11",
+                            "statue41": "gem12",
+                            "statue42": "gem13",
+                            "statue43": "gem14",
+                            "statue44": "gem15",
+                            "statue50": "gem21",
+                            "statue51": "gem22",
+                            "statue52": "gem23",
+                            "statue53": "gem24",
+                            "statue54": "gem25",
+                            "statue60": "gem31",
+                            "statue61": "gem32",
+                            "statue62": "gem33",
+                            "statue63": "gem34",
+                            "statue64": "gem35",
+                            "statue70": "gem41",
+                            "statue71": "gem42",
+                            "statue72": "gem43",
+                            "statue73": "gem44",
+                            "statue74": "gem45",
+                            "statue80": "gem51",
+                            "statue81": "gem52",
+                            "statue82": "gem53",
+                            "statue83": "gem54",
+                            "statue84": "gem55",
+                        }
+                        gem_to_hide = statue_gem_map.get(statue.type)
+                        if gem_to_hide and hasattr(player, gem_to_hide):
+                            setattr(player, gem_to_hide, False)
+                            print(f"[DEBUG] Гем {gem_to_hide} приховано (player.{gem_to_hide} = False)")
+                            
+                        # Додаємо тільки для statue40...statue44 (тобто при переході на statue41...statue45)
+                        if base.startswith("statue4") and 0 <= num < 5:
+                            player.protection += 3
+                            print(f"[DEBUG] protection збільшено на 3, тепер: {player.protection}")
+                            
+                        if base.startswith("statue5") and 0 <= num < 5:
+                            player.health += 3
+                            print(f"[DEBUG] health збільшено на 3, тепер: {player.health}")
+                            
+                        if base.startswith("statue6") and 0 <= num < 5:
+                            player.atk += 3
+                            print(f"[DEBUG] atk збільшено на 3, тепер: {player.atk}")
+                            
+                        if base.startswith("statue7") and 0 <= num < 5:
+                            player.speed += 1
+                            print(f"[DEBUG] speed збільшено на 3, тепер: {player.speed}")
+                            
+                        if base.startswith("statue8") and 0 <= num < 5:
+                            player.luck += 1
+                            print(f"[DEBUG] luck збільшено на 3, тепер: {player.luck}")
+
+                        # Змінюємо номер (циклічно 0-5)
+                        if 0 <= num < 5:
+                            num += 1
+                        else:
+                            num = 0
+                        new_type = f"{base}{num}"
+                        print(f"[DEBUG] Спроба змінити тип статуї на: {new_type}")
+                        if new_type in textures:
+                            statue.type = new_type
+                            statue.texture = textures[new_type]
+                            print(f"[DEBUG] Текстура статуї змінена на {new_type}")
+                        else:
+                            print(f"[DEBUG] Текстура {new_type} не знайдена в textures")
+                        break
+                if not clicked_any_statue:
+                    print(f"[DEBUG] ПКМ не по жодній статуї. Координати кліку: {mouse_pos}")
             elif event.type == pygame.MOUSEBUTTONDOWN and is_paused:
                 mouse_pos = event.pos
                 for button_name, button_pos in button_positions.items():

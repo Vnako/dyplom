@@ -24,6 +24,7 @@ DANGEON_DIR = ASSETS_DIR / "img" / "dangeon"
 ENTITIES_DIR = ASSETS_DIR / "img" / "entities"
 START_LOC_DIR = ASSETS_DIR / "img" / "start_loc"
 STATUE_DIR = ENTITIES_DIR / "statue"
+ITEMS_DIR = ASSETS_DIR / "img" / "pick_items"
 
 # Завантаження текстур
 def load_textures():
@@ -78,12 +79,61 @@ def load_textures():
             "trees_left": pygame.image.load(str(START_LOC_DIR / "trees_left.png")).convert_alpha(),
             "trees_center": pygame.image.load(str(START_LOC_DIR / "trees_center.png")).convert_alpha(),
             "trees_right": pygame.image.load(str(START_LOC_DIR / "trees_right.png")).convert_alpha(),
-            "statue4": pygame.image.load(str(STATUE_DIR / "statue10.png")).convert_alpha(),
-            "statue5": pygame.image.load(str(STATUE_DIR / "statue20.png")).convert_alpha(),
-            "statue6": pygame.image.load(str(STATUE_DIR / "statue30.png")).convert_alpha(),
-            "statue7": pygame.image.load(str(STATUE_DIR / "statue40.png")).convert_alpha(),
-            "statue8": pygame.image.load(str(STATUE_DIR / "statue50.png")).convert_alpha(),
-                        
+            "statue40": pygame.image.load(str(STATUE_DIR / "statue10.png")).convert_alpha(),
+            "statue41": pygame.image.load(str(STATUE_DIR / "statue11.png")).convert_alpha(),
+            "statue42": pygame.image.load(str(STATUE_DIR / "statue12.png")).convert_alpha(),
+            "statue43": pygame.image.load(str(STATUE_DIR / "statue13.png")).convert_alpha(),
+            "statue44": pygame.image.load(str(STATUE_DIR / "statue14.png")).convert_alpha(),
+            "statue45": pygame.image.load(str(STATUE_DIR / "statue15.png")).convert_alpha(),
+            "statue50": pygame.image.load(str(STATUE_DIR / "statue20.png")).convert_alpha(),
+            "statue51": pygame.image.load(str(STATUE_DIR / "statue21.png")).convert_alpha(),
+            "statue52": pygame.image.load(str(STATUE_DIR / "statue22.png")).convert_alpha(),
+            "statue53": pygame.image.load(str(STATUE_DIR / "statue23.png")).convert_alpha(),
+            "statue54": pygame.image.load(str(STATUE_DIR / "statue24.png")).convert_alpha(),
+            "statue55": pygame.image.load(str(STATUE_DIR / "statue25.png")).convert_alpha(),
+            "statue60": pygame.image.load(str(STATUE_DIR / "statue30.png")).convert_alpha(),
+            "statue61": pygame.image.load(str(STATUE_DIR / "statue31.png")).convert_alpha(),
+            "statue62": pygame.image.load(str(STATUE_DIR / "statue32.png")).convert_alpha(),
+            "statue63": pygame.image.load(str(STATUE_DIR / "statue33.png")).convert_alpha(),
+            "statue64": pygame.image.load(str(STATUE_DIR / "statue34.png")).convert_alpha(),
+            "statue65": pygame.image.load(str(STATUE_DIR / "statue35.png")).convert_alpha(),
+            "statue70": pygame.image.load(str(STATUE_DIR / "statue40.png")).convert_alpha(),
+            "statue71": pygame.image.load(str(STATUE_DIR / "statue41.png")).convert_alpha(),
+            "statue72": pygame.image.load(str(STATUE_DIR / "statue42.png")).convert_alpha(),
+            "statue73": pygame.image.load(str(STATUE_DIR / "statue43.png")).convert_alpha(),
+            "statue74": pygame.image.load(str(STATUE_DIR / "statue44.png")).convert_alpha(),
+            "statue75": pygame.image.load(str(STATUE_DIR / "statue45.png")).convert_alpha(),
+            "statue80": pygame.image.load(str(STATUE_DIR / "statue50.png")).convert_alpha(),
+            "statue81": pygame.image.load(str(STATUE_DIR / "statue51.png")).convert_alpha(),
+            "statue82": pygame.image.load(str(STATUE_DIR / "statue52.png")).convert_alpha(),
+            "statue83": pygame.image.load(str(STATUE_DIR / "statue53.png")).convert_alpha(),
+            "statue84": pygame.image.load(str(STATUE_DIR / "statue54.png")).convert_alpha(),
+            "statue85": pygame.image.load(str(STATUE_DIR / "statue55.png")).convert_alpha(),
+            "gem11": pygame.image.load(str(ITEMS_DIR / "gem11.png")).convert_alpha(),
+            "gem12": pygame.image.load(str(ITEMS_DIR / "gem12.png")).convert_alpha(),
+            "gem13": pygame.image.load(str(ITEMS_DIR / "gem13.png")).convert_alpha(),
+            "gem14": pygame.image.load(str(ITEMS_DIR / "gem14.png")).convert_alpha(),
+            "gem15": pygame.image.load(str(ITEMS_DIR / "gem15.png")).convert_alpha(),
+            "gem21": pygame.image.load(str(ITEMS_DIR / "gem21.png")).convert_alpha(),
+            "gem22": pygame.image.load(str(ITEMS_DIR / "gem22.png")).convert_alpha(),
+            "gem23": pygame.image.load(str(ITEMS_DIR / "gem23.png")).convert_alpha(),
+            "gem24": pygame.image.load(str(ITEMS_DIR / "gem24.png")).convert_alpha(),
+            "gem25": pygame.image.load(str(ITEMS_DIR / "gem25.png")).convert_alpha(),
+            "gem31": pygame.image.load(str(ITEMS_DIR / "gem31.png")).convert_alpha(),
+            "gem32": pygame.image.load(str(ITEMS_DIR / "gem32.png")).convert_alpha(),
+            "gem33": pygame.image.load(str(ITEMS_DIR / "gem33.png")).convert_alpha(),
+            "gem34": pygame.image.load(str(ITEMS_DIR / "gem34.png")).convert_alpha(),
+            "gem35": pygame.image.load(str(ITEMS_DIR / "gem35.png")).convert_alpha(),
+            "gem41": pygame.image.load(str(ITEMS_DIR / "gem41.png")).convert_alpha(),
+            "gem42": pygame.image.load(str(ITEMS_DIR / "gem42.png")).convert_alpha(),
+            "gem43": pygame.image.load(str(ITEMS_DIR / "gem43.png")).convert_alpha(),
+            "gem44": pygame.image.load(str(ITEMS_DIR / "gem44.png")).convert_alpha(),
+            "gem45": pygame.image.load(str(ITEMS_DIR / "gem45.png")).convert_alpha(),
+            "gem51": pygame.image.load(str(ITEMS_DIR / "gem51.png")).convert_alpha(),
+            "gem52": pygame.image.load(str(ITEMS_DIR / "gem52.png")).convert_alpha(),
+            "gem53": pygame.image.load(str(ITEMS_DIR / "gem53.png")).convert_alpha(),
+            "gem54": pygame.image.load(str(ITEMS_DIR / "gem54.png")).convert_alpha(),
+            "gem55": pygame.image.load(str(ITEMS_DIR / "gem55.png")).convert_alpha(),
         }
         # Перевірка наявності текстур
         for texture_name, texture_path in [
@@ -204,12 +254,12 @@ def load_level(level_path, textures):
 
     statues = [
         IntStat(
-            statue['x'] * TILE_SIZE, statue['y'] * TILE_SIZE, statue['is_solid'], statue_type_mapping.get(statue['type'], 'statue4'), {
-                'statue4': textures['statue4'],
-                'statue5': textures['statue5'],
-                'statue6': textures['statue6'],
-                'statue7': textures['statue7'],
-                'statue8': textures['statue8']
+            statue['x'] * TILE_SIZE, statue['y'] * TILE_SIZE, statue['is_solid'], statue_type_mapping.get(statue['type'], 'statue40'), {
+                'statue4': textures['statue40'],
+                'statue5': textures['statue50'],
+                'statue6': textures['statue60'],
+                'statue7': textures['statue70'],
+                'statue8': textures['statue80']
             },
         )
         for statue in level_data['statues']
@@ -288,6 +338,25 @@ def load_grass_textures(grass_dir):
         grass_textures[f"grass{i}"] = pygame.image.load(str(texture_path))
     return grass_textures
 
+def draw_player_gems(player, screen):
+    """
+    Малює зображення гемів у верхній частині екрана, якщо відповідний gemXX == True.
+    """
+    gem_size = 50  # Розмір гема (можна змінити)
+    margin = 8     # Відступ між гемами
+    start_x = int(SCREEN_WIDTH * 0.8)   # Початковий X
+    start_y = int(SCREEN_HEIGHT * 0.02)   # Початковий Y (верхня частина екрана)
+
+    for i in range(1, 6):
+        for j in range(1, 6):
+            attr = f"gem{i}{j}"
+            if getattr(player, attr, True):
+                texture = player.gem_textures.get(attr)
+                if texture:
+                    x = start_x + (i - 1) * (gem_size + margin)
+                    y = start_y + (j - 1) * (gem_size + margin)
+                    screen.blit(pygame.transform.scale(texture, (gem_size, gem_size)), (x, y))
+
 def main():
     screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
     pygame.display.set_caption("2D Ігровий рушій")
@@ -328,6 +397,9 @@ def main():
         for statue in statues:
             statue.draw(screen)
         player.draw(screen)
+
+        # Малювання гемів гравця
+        draw_player_gems(player, screen)
 
         # Обробка подій
         for event in pygame.event.get():
