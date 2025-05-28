@@ -163,57 +163,35 @@ def render_pause_menu(screen, pause_menu_image, pause_menu_buttons, button_posit
 current_volume = 1
 pygame.mixer.music.set_volume(current_volume)
 
-def handle_volume_slider_event(event, current_volume):
-    """
-    Обробляє події для повзунка гучності.
-    """
-    slider_x = int(SCREEN_WIDTH * 0.13)
-    slider_y = int(SCREEN_HEIGHT * 0.36)
-    slider_width = 400
-    slider_height = 10
-
-    # Використовуємо settings_font для розрахунку ширини тексту, як і у render_volume_slider
-    text = settings_font.render(f"Гучність: {int(current_volume * 100)}%", True, (255, 255, 255))
-    slider_x_aligned = int(SCREEN_WIDTH * 0.3)
-
-    # Додаємо print для діагностики координат (завжди, для перевірки)
-    print(f"slider_x_aligned={slider_x_aligned}, slider_width={slider_width}, slider_y={slider_y}, slider_height={slider_height}")
-
-    if event.type == pygame.MOUSEBUTTONDOWN or (event.type == pygame.MOUSEMOTION and getattr(event, "buttons", (0,))[0]):
-        mx, my = event.pos
-        print(f"mx={mx}, my={my}")
-        if slider_x_aligned <= mx <= slider_x_aligned + slider_width and slider_y <= my <= slider_y + slider_height:
-            mx_clamped = max(slider_x_aligned, min(mx, slider_x_aligned + slider_width))
-            new_volume = (mx_clamped - slider_x_aligned) / slider_width
-            new_volume = max(0, min(1, new_volume))
-            pygame.mixer.music.set_volume(new_volume)
-            return new_volume
-    return current_volume
-
-def render_volume_slider(screen, current_volume, font):
+def render_volume_slider(screen, current_volume, settings_font):
     """
     Малює повзунок гучності поверх меню налаштувань в одному рядку з написом.
     """
-    slider_x = int(SCREEN_WIDTH * 0.13)
+    slider_x = int(SCREEN_WIDTH * 0.26)
     slider_y = int(SCREEN_HEIGHT * 0.36)
     slider_width = 400
     slider_height = 10
 
-    # Текст "Гучність: XX%"
-    text = settings_font.render(f"Гучність: {int(current_volume * 100)}%", True, (255, 255, 255))
-    text_rect = text.get_rect()
-    text_rect.centery = slider_y + slider_height // 2
-    slider_x_aligned = int(SCREEN_WIDTH * 0.3)
-
-    # Малюємо текст
-    screen.blit(text, (slider_x, text_rect.top))
-
     # Малюємо лінію повзунка
-    pygame.draw.rect(screen, (180, 180, 180), (slider_x_aligned, slider_y, slider_width, slider_height))
-    # Положення "ручки" повзунка
-    handle_x = slider_x_aligned + int(current_volume * slider_width)
+    pygame.draw.rect(screen, (180, 180, 180), (slider_x, slider_y, slider_width, slider_height))
+    # Положення "ручки" повзунка залежить від поточної гучності
+    handle_x = slider_x + int(current_volume * slider_width)
     handle_y = slider_y + slider_height // 2
     pygame.draw.circle(screen, (255, 255, 255), (handle_x, handle_y), 15)
+
+    # Текст "Гучність: XX%" після повзунка
+    text = settings_font.render(f"{int(current_volume * 100)}%", True, (255, 255, 255))
+    text_rect = text.get_rect()
+    text_rect.centery = slider_y + slider_height // 2
+    text_x = int(SCREEN_WIDTH * 0.5)
+    screen.blit(text, (text_x, text_rect.top))
+
+    # Підпис "Гучність:" перед повзунком
+    label = settings_font.render("Гучність:", True, (255, 255, 255))
+    label_rect = label.get_rect()
+    label_rect.centery = slider_y + slider_height // 2
+    label_x = int(SCREEN_WIDTH * 0.13)
+    screen.blit(label, (label_x, label_rect.top))
 
 def render_settings_menu(screen, settings_menu_image, settings_menu_buttons, settings_button_positions, title_font, settings_font, menu_font):
     global current_volume
@@ -235,7 +213,7 @@ def render_settings_menu(screen, settings_menu_image, settings_menu_buttons, set
             "save_back": "Зберегти та закрити",
             "save": "Зберегти"
         })
-    render_volume_slider(screen, current_volume, menu_font)
+    render_volume_slider(screen, current_volume, settings_font)
 
     # --- Чекбокси ---
     # Координати чекбоксів
@@ -280,12 +258,10 @@ def render_settings_menu(screen, settings_menu_image, settings_menu_buttons, set
         if event.type == pygame.MOUSEBUTTONDOWN or (event.type == pygame.MOUSEMOTION and event.buttons[0]):
             mouse_pos = event.pos
             # --- Повзунок гучності ---
-            slider_x = int(SCREEN_WIDTH * 0.13)
             slider_y = int(SCREEN_HEIGHT * 0.36)
             slider_width = 400
             slider_height = 10
-            text = menu_font.render(f"Гучність: {int(current_volume * 100)}%", True, (255, 255, 255))
-            slider_x_aligned = int(SCREEN_WIDTH * 0.3)
+            slider_x_aligned = int(SCREEN_WIDTH * 0.26)
             if (slider_x_aligned <= mouse_pos[0] <= slider_x_aligned + slider_width and
                 slider_y - 10 <= mouse_pos[1] <= slider_y + slider_height + 10):
                 new_volume = (mouse_pos[0] - slider_x_aligned) / slider_width
