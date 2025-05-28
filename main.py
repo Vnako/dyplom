@@ -6,6 +6,8 @@ from pathlib import Path
 from engine.loader import load_textures, generate_background_grid, determine_tree_texture, render_background, enemy_type_mapping, npc_type_mapping, statue_type_mapping, load_grass_textures
 from engine.parser import parse_level_file
 from engine.entities import Player, Block, Enemy, Item, Npc, Camera, IntStat
+import tkinter as tk
+from tkinter import filedialog
 
 # Ініціалізація Pygame
 pygame.init()
@@ -20,7 +22,7 @@ SCREEN_WIDTH, SCREEN_HEIGHT = display_info.current_w, display_info.current_h
 # Константи екрану
 TILE_SIZE = 100
 screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.RESIZABLE)
-pygame.display.set_caption("Меню гри")
+pygame.display.set_caption("Slime Quest: Dungeon")
 clock = pygame.time.Clock()
 
 # Шляхи до ресурсів
@@ -30,42 +32,15 @@ INTERFACE_DIR = ASSETS_DIR / "img" / "interface"
 GRASS_DIR = ASSETS_DIR / "img" / "start_loc" / "grass"
 LEVELS_DIR = BASE_DIR / "levels"
 
-# Завантаження кадрів GIF
-def load_gif_frames(folder_path, scale=None):
-    """
-    Завантажує всі кадри GIF із вказаної папки.
-    :param folder_path: Шлях до папки з кадрами GIF
-    :param scale: (width, height) або None
-    :return: Список кадрів (поверхонь Pygame)
-    """
-    frames = []
-    absolute_path = Path(folder_path).resolve()
-    if not absolute_path.exists():
-        print(f"Помилка: Папка {absolute_path} не існує.")
-        sys.exit()
-
-    for filename in sorted(absolute_path.iterdir()):
-        if filename.suffix == ".png":
-            frame = pygame.image.load(str(filename)).convert_alpha()
-            if scale is not None:
-                frame = pygame.transform.smoothscale(frame, scale)
-            frames.append(frame)
-
-    if not frames:
-        print(f"Помилка: У папці {absolute_path} немає файлів .png.")
-        sys.exit()
-
-    return frames
-
 # --- Глобальні змінні для масштабованих зображень ---
-GIF_FRAME_SIZE = (SCREEN_WIDTH, SCREEN_HEIGHT)
 ROTATING_IMAGE_SIZE = (SCREEN_HEIGHT, SCREEN_HEIGHT)  # квадрат, кожна сторона = висота екрана
 
 # Завантаження шрифту
 try:
-    font = pygame.font.Font("assets/fonts/Hitch-hike.otf", 100)
-    title_font = pygame.font.Font("assets/fonts/Hitch-hike.otf", 150) 
-    menu_font = pygame.font.Font("assets/fonts/Hitch-hike.otf", 50)
+    font = pygame.font.Font("assets/fonts/Hitch-hike.otf", int(SCREEN_HEIGHT * 0.1))
+    title_font = pygame.font.Font("assets/fonts/Hitch-hike.otf", int(SCREEN_HEIGHT * 0.145)) 
+    menu_font = pygame.font.Font("assets/fonts/Hitch-hike.otf", int(SCREEN_HEIGHT * 0.047))
+    settings_font = pygame.font.Font("assets/fonts/Hitch-hike.otf", int(SCREEN_HEIGHT * 0.075))
 except FileNotFoundError as e:
     print(f"Помилка завантаження шрифту: {e}")
     sys.exit()
@@ -79,21 +54,15 @@ except pygame.error as e:
 
 # --- Функція для оновлення масштабованих зображень при зміні розміру ---
 def update_scaled_images():
-    global gif_frames, rotating_image, rotating_image_rect
-    gif_frames = load_gif_frames(INTERFACE_DIR / "mainmenu_frames", scale=(screen.get_width(), screen.get_height()))
+    global mainmenu_bg, rotating_image, rotating_image_rect
+    # Оновлення фонового зображення
     try:
-        # Масштабуємо rotating_image як квадрат: сторона = висота екрана
-        side = screen.get_height()
-        rotating_image_raw = pygame.image.load(str(INTERFACE_DIR / "mainmaenu_particles.png")).convert_alpha()
-        rotating_image_scaled = pygame.transform.smoothscale(rotating_image_raw, (side, side))
-        rotating_image_rect = rotating_image_scaled.get_rect(center=(screen.get_width() // 2 + 200, screen.get_height() // 2))
-        return rotating_image_scaled
+        mainmenu_bg = pygame.image.load(str(INTERFACE_DIR / "mainmenu.png")).convert_alpha()
+        mainmenu_bg = pygame.transform.smoothscale(mainmenu_bg, (screen.get_width(), screen.get_height()))
     except pygame.error as e:
-        print(f"Помилка завантаження зображення для обертання: {e}")
+        print(f"Помилка завантаження фонового зображення: {e}")
         sys.exit()
 
-# --- Ініціалізація масштабованих зображень ---
-gif_frames = load_gif_frames(INTERFACE_DIR / "mainmenu_frames", scale=GIF_FRAME_SIZE)
 try:
     # Масштабуємо rotating_image як квадрат: сторона = висота екрана
     side = SCREEN_HEIGHT
@@ -102,7 +71,7 @@ try:
 except pygame.error as e:
     print(f"Помилка завантаження зображення для обертання: {e}")
     sys.exit()
-rotating_image_rect = rotating_image.get_rect(center=(SCREEN_WIDTH // 2 + 200, SCREEN_HEIGHT // 2))
+rotating_image_rect = rotating_image.get_rect(center=(SCREEN_WIDTH * 0.63, SCREEN_HEIGHT // 2))
 rotation_angle = 0  # Початковий кут обертання
 
 # Завантаження текстур
@@ -116,7 +85,7 @@ level_data = None  # Рівень буде завантажено після н�
 # Текстові елементи
 menu_items = ["Нова гра", "Збереження", "Налаштування", "Вихід"]
 MENU_X = int(SCREEN_WIDTH * 0.07)
-menu_positions = [(MENU_X, 450), (MENU_X, 560), (MENU_X, 670), (MENU_X, 780)]  # Вирівнювання по лівому краю
+menu_positions = [(MENU_X, int(SCREEN_HEIGHT * 0.4)), (MENU_X, int(SCREEN_HEIGHT * 0.52)), (MENU_X, int(SCREEN_HEIGHT * 0.64)), (MENU_X, int(SCREEN_HEIGHT * 0.76))]  # Вирівнювання по лівому краю
 
 # Завантаження зображення паузи
 try:
@@ -130,18 +99,18 @@ pause_menu_rect = pause_menu_image.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HE
 
 # Розташування кнопок на зображенні паузи
 button_positions = {
-    "continue": (SCREEN_WIDTH // 2 - 160, SCREEN_HEIGHT // 2 - 75),
-    "saves": (SCREEN_WIDTH // 2 - 160, SCREEN_HEIGHT // 2 + 25),
-    "preferences": (SCREEN_WIDTH // 2 - 160, SCREEN_HEIGHT // 2 + 125),
-    "exit": (SCREEN_WIDTH // 2 - 160, SCREEN_HEIGHT // 2 + 225),
+    "continue": (int(SCREEN_WIDTH * 0.41), int(SCREEN_HEIGHT * 0.4)),
+    "saves": (int(SCREEN_WIDTH * 0.41), int(SCREEN_HEIGHT * 0.5)),
+    "preferences": (int(SCREEN_WIDTH * 0.41), int(SCREEN_HEIGHT * 0.6)),
+    "exit": (int(SCREEN_WIDTH * 0.41), int(SCREEN_HEIGHT * 0.7)),
 }
 
 # Розташування кнопок на зображенні налаштувань
 settings_button_positions = {
-    "back": (SCREEN_WIDTH // 2 - 699, SCREEN_HEIGHT // 2 + 225),
-    "default": (SCREEN_WIDTH // 2 - 337, SCREEN_HEIGHT // 2 + 225),
-    "save_back": (SCREEN_WIDTH // 2 + 30, SCREEN_HEIGHT // 2 + 225),
-    "save": (SCREEN_WIDTH // 2 + 392, SCREEN_HEIGHT // 2 + 225),
+    "back": (int(SCREEN_WIDTH * 0.12), int(SCREEN_HEIGHT * 0.75)),
+    "default": (int(SCREEN_WIDTH * 0.31), int(SCREEN_HEIGHT * 0.75)),
+    "save_back": (int(SCREEN_WIDTH * 0.51), int(SCREEN_HEIGHT * 0.75)),
+    "save": (int(SCREEN_WIDTH * 0.7), int(SCREEN_HEIGHT * 0.75)),
 }
 
 # Завантаження зображення для меню налаштувань
@@ -152,8 +121,7 @@ except pygame.error as e:
     print(f"Помилка завантаження зображення меню налаштувань: {e}")
     sys.exit()
 
-settings_menu_rect = settings_menu_image.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 25))  # Центрування зображення
-
+settings_menu_rect = settings_menu_image.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2))
 def render_button_text(screen, menu_font, button_name, button_pos, button_image, button_text_mapping):
     """
     Renders button text and blits it onto the screen.
@@ -177,14 +145,9 @@ def render_pause_menu(screen, pause_menu_image, pause_menu_buttons, button_posit
     screen.blit(pause_menu_image, pause_menu_rect)
 
     # Додавання тексту "Пауза" зверху
-    pause_text = title_font.render("Пауза", True, (255, 255, 255))  # Білий текст
-    pause_text_rect = pause_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 270))
+    pause_text = title_font.render("Пауза", True, (255, 255, 255))
+    pause_text_rect = pause_text.get_rect(center=(SCREEN_WIDTH // 2, int(SCREEN_HEIGHT * 0.29)))
     screen.blit(pause_text, pause_text_rect)
-
-    # Додавання тексту "||" під "Пауза"
-    pause_separator = font.render("||", True, (255, 255, 255))  # Білий текст
-    pause_separator_rect = pause_separator.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 110))
-    screen.blit(pause_separator, pause_separator_rect)
 
     # Відображення кнопок паузи
     for button_name, button_pos in button_positions.items():
@@ -204,21 +167,24 @@ def handle_volume_slider_event(event, current_volume):
     """
     Обробляє події для повзунка гучності.
     """
-    slider_x = SCREEN_WIDTH // 2 - 200
-    slider_y = SCREEN_HEIGHT // 2 - 100
+    slider_x = int(SCREEN_WIDTH * 0.13)
+    slider_y = int(SCREEN_HEIGHT * 0.36)
     slider_width = 400
-    slider_height = 30
+    slider_height = 10
 
-    # Враховуємо ширину тексту "Гучність: XX%" та відступ
-    text = menu_font.render(f"Гучність: {int(current_volume * 100)}%", True, (255, 255, 255))
-    text_rect = text.get_rect()
-    spacing = 20
-    slider_x_aligned = slider_x + text_rect.width + spacing
+    # Використовуємо settings_font для розрахунку ширини тексту, як і у render_volume_slider
+    text = settings_font.render(f"Гучність: {int(current_volume * 100)}%", True, (255, 255, 255))
+    slider_x_aligned = int(SCREEN_WIDTH * 0.3)
 
-    if event.type == pygame.MOUSEBUTTONDOWN or (event.type == pygame.MOUSEMOTION and event.buttons[0]):
+    # Додаємо print для діагностики координат (завжди, для перевірки)
+    print(f"slider_x_aligned={slider_x_aligned}, slider_width={slider_width}, slider_y={slider_y}, slider_height={slider_height}")
+
+    if event.type == pygame.MOUSEBUTTONDOWN or (event.type == pygame.MOUSEMOTION and getattr(event, "buttons", (0,))[0]):
         mx, my = event.pos
-        if slider_x_aligned <= mx <= slider_x_aligned + slider_width and slider_y - 10 <= my <= slider_y + slider_height:
-            new_volume = (mx - slider_x_aligned) / slider_width
+        print(f"mx={mx}, my={my}")
+        if slider_x_aligned <= mx <= slider_x_aligned + slider_width and slider_y <= my <= slider_y + slider_height:
+            mx_clamped = max(slider_x_aligned, min(mx, slider_x_aligned + slider_width))
+            new_volume = (mx_clamped - slider_x_aligned) / slider_width
             new_volume = max(0, min(1, new_volume))
             pygame.mixer.music.set_volume(new_volume)
             return new_volume
@@ -228,21 +194,16 @@ def render_volume_slider(screen, current_volume, font):
     """
     Малює повзунок гучності поверх меню налаштувань в одному рядку з написом.
     """
-    slider_x = SCREEN_WIDTH // 2 - 200
-    slider_y = SCREEN_HEIGHT // 2 - 100
+    slider_x = int(SCREEN_WIDTH * 0.13)
+    slider_y = int(SCREEN_HEIGHT * 0.36)
     slider_width = 400
     slider_height = 10
 
     # Текст "Гучність: XX%"
-    text = font.render(f"Гучність: {int(current_volume * 100)}%", True, (255, 255, 255))
+    text = settings_font.render(f"Гучність: {int(current_volume * 100)}%", True, (255, 255, 255))
     text_rect = text.get_rect()
     text_rect.centery = slider_y + slider_height // 2
-
-    # Відступ між текстом і повзунком
-    spacing = 20
-
-    # Зміщуємо повзунок праворуч від тексту
-    slider_x_aligned = slider_x + text_rect.width + spacing
+    slider_x_aligned = int(SCREEN_WIDTH * 0.3)
 
     # Малюємо текст
     screen.blit(text, (slider_x, text_rect.top))
@@ -254,7 +215,7 @@ def render_volume_slider(screen, current_volume, font):
     handle_y = slider_y + slider_height // 2
     pygame.draw.circle(screen, (255, 255, 255), (handle_x, handle_y), 15)
 
-def render_settings_menu(screen, settings_menu_image, settings_menu_buttons, settings_button_positions, title_font, menu_font):
+def render_settings_menu(screen, settings_menu_image, settings_menu_buttons, settings_button_positions, title_font, settings_font, menu_font):
     global current_volume
 
     # Відображення зображення налаштувань поверх гри
@@ -262,7 +223,7 @@ def render_settings_menu(screen, settings_menu_image, settings_menu_buttons, set
 
     # Додавання тексту "Налаштування" зверху
     settings_text = title_font.render("Налаштування", True, (255, 255, 255))  # Білий текст
-    settings_text_rect = settings_text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 300))
+    settings_text_rect = settings_text.get_rect(center=(SCREEN_WIDTH // 2, int(SCREEN_HEIGHT * 0.23)))
     screen.blit(settings_text, settings_text_rect)
 
     # Відображення кнопок налаштувань
@@ -278,19 +239,19 @@ def render_settings_menu(screen, settings_menu_image, settings_menu_buttons, set
 
     # --- Чекбокси ---
     # Координати чекбоксів
-    checkbox_x = SCREEN_WIDTH // 2 + 200
-    checkbox_y_start = SCREEN_HEIGHT // 2 + 10
-    checkbox_spacing = 60
+    checkbox_x = int(SCREEN_WIDTH * 0.42)
+    checkbox_y_start = int(SCREEN_HEIGHT * 0.45)
+    checkbox_spacing = int(SCREEN_HEIGHT * 0.09)
 
     # Текстові підписи для чекбоксів
-    hints_label = menu_font.render("Підказки", True, (255, 255, 255))
-    windowed_label = menu_font.render("Віконний режим", True, (255, 255, 255))
-    level_select_label = menu_font.render("Вибір рівнів", True, (255, 255, 255))
+    hints_label = settings_font.render("Підказки", True, (255, 255, 255))
+    windowed_label = settings_font.render("Повноекранний режим", True, (255, 255, 255))
+    level_select_label = settings_font.render("Вибір рівнів", True, (255, 255, 255))
 
     # Відображення підписів
-    screen.blit(hints_label, (checkbox_x - hints_label.get_width() - 40, checkbox_y_start - 5))
-    screen.blit(windowed_label, (checkbox_x - windowed_label.get_width() - 40, checkbox_y_start + checkbox_spacing - 5))
-    screen.blit(level_select_label, (checkbox_x - level_select_label.get_width() - 40, checkbox_y_start + 2 * checkbox_spacing - 5))
+    screen.blit(hints_label, (int(SCREEN_WIDTH * 0.13), int(SCREEN_HEIGHT * 0.41)))
+    screen.blit(windowed_label, (int(SCREEN_WIDTH * 0.13), int(SCREEN_HEIGHT * 0.5)))
+    screen.blit(level_select_label, (int(SCREEN_WIDTH * 0.13), int(SCREEN_HEIGHT * 0.59)))
 
     # Чекбокс "Підказки"
     hints_rect = pygame.Rect(checkbox_x, checkbox_y_start, 30, 30)
@@ -319,14 +280,12 @@ def render_settings_menu(screen, settings_menu_image, settings_menu_buttons, set
         if event.type == pygame.MOUSEBUTTONDOWN or (event.type == pygame.MOUSEMOTION and event.buttons[0]):
             mouse_pos = event.pos
             # --- Повзунок гучності ---
-            slider_x = SCREEN_WIDTH // 2 - 200
-            slider_y = SCREEN_HEIGHT // 2 - 100
+            slider_x = int(SCREEN_WIDTH * 0.13)
+            slider_y = int(SCREEN_HEIGHT * 0.36)
             slider_width = 400
             slider_height = 10
             text = menu_font.render(f"Гучність: {int(current_volume * 100)}%", True, (255, 255, 255))
-            text_rect = text.get_rect()
-            spacing = 20
-            slider_x_aligned = slider_x + text_rect.width + spacing
+            slider_x_aligned = int(SCREEN_WIDTH * 0.3)
             if (slider_x_aligned <= mouse_pos[0] <= slider_x_aligned + slider_width and
                 slider_y - 10 <= mouse_pos[1] <= slider_y + slider_height + 10):
                 new_volume = (mouse_pos[0] - slider_x_aligned) / slider_width
@@ -476,6 +435,7 @@ def set_default_settings():
         settings_menu_buttons,
         settings_button_positions,
         title_font,
+        settings_font,
         menu_font
     )
     pygame.display.flip()
@@ -496,6 +456,30 @@ def create_player(player_start, textures):
             "player_back_right": textures.get("player_back_right", textures["player_right"])
         }
     )
+
+def select_level_file():
+    """
+    Відкриває діалог вибору файлу рівня та повертає шлях до вибраного .lvl-файлу або None.
+    """
+    root = tk.Tk()
+    root.withdraw()
+    file_path = filedialog.askopenfilename(
+        initialdir=str(LEVELS_DIR),
+        title="Оберіть файл рівня",
+        filetypes=[("Level files", "*.lvl")]
+    )
+    root.destroy()
+    if file_path:
+        return file_path
+    return None
+
+# --- Ініціалізація фонового зображення ---
+try:
+    mainmenu_bg = pygame.image.load(str(INTERFACE_DIR / "mainmenu.png")).convert_alpha()
+    mainmenu_bg = pygame.transform.smoothscale(mainmenu_bg, (SCREEN_WIDTH, SCREEN_HEIGHT))
+except pygame.error as e:
+    print(f"Помилка завантаження фонового зображення: {e}")
+    sys.exit()
 
 # Основний цикл
 running = True
@@ -550,12 +534,8 @@ while running:
             except FileNotFoundError:
                 print("Файл menu2.wav не знайдено!")
 
-        # Відображення анімованого фону
-        screen.blit(gif_frames[current_frame], (0, 0))
-        frame_counter += 1
-        if frame_counter >= frame_delay:
-            current_frame = (current_frame + 1) % len(gif_frames)
-            frame_counter = 0
+        # Відображення статичного фону замість анімації
+        screen.blit(mainmenu_bg, (0, 0))
 
         # Обертання зображення
         rotation_angle = (rotation_angle + 1) % 360  # Збільшуємо кут обертання
@@ -565,7 +545,7 @@ while running:
 
         # Відображення назви гри
         title_text = title_font.render("Slime Quest: Dungeon", True, (255, 255, 255))  # Білий колір
-        title_rect = title_text.get_rect(topleft=(MENU_X, 150))  # 10% від лівого краю
+        title_rect = title_text.get_rect(topleft=(MENU_X, int(SCREEN_HEIGHT * 0.18)))  # 20% від висоти екрана
         screen.blit(title_text, title_rect)
 
         # Відображення тексту
@@ -621,10 +601,7 @@ while running:
                             showing_settings = False
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
-                    if showing_stats:
-                        showing_stats = False
-                    elif showing_settings:
-                        showing_settings = False
+                    showing_settings = False
             elif event.type == pygame.KEYUP:
                 if event.key in pressed_keys:
                     pressed_keys.discard(event.key)
@@ -1025,27 +1002,45 @@ while running:
         for npc in npcs:
             if player.rect.colliderect(npc.rect):
                 if npc.type == 'enter' and not level_transitioning:
-                    print("Завантаження рівня level1...")
-                    level_transitioning = True
-                    level_path = LEVELS_DIR / "level1.lvl"
-                    level_data = parse_level_file(level_path)
-                    # ...existing code for level transition...
-                    # (перенесіть сюди код ініціалізації level1)
-                    level_transitioning = False
-                    break
+                    if settings.get("level_select", False):
+                        # --- Діалог вибору рівня ---
+                        selected_file = select_level_file()
+                        if selected_file:
+                            print(f"Вибрано рівень: {selected_file}")
+                            level_transitioning = True
+                            level_path = Path(selected_file)
+                            player = None
+                            camera = None
+                            background_grid = None
+                            # Після цього цикл ініціалізує новий рівень автоматично
+                            level_transitioning = False
+                        else:
+                            print("Вибір рівня скасовано.")
+                        break
+                    else:
+                        print("Завантаження рівня level1...")
+                        level_transitioning = True
+                        level_path = LEVELS_DIR / "level1.lvl"
+                        player = None
+                        camera = None
+                        background_grid = None
+                        # Після цього цикл ініціалізує новий рівень автоматично
+                        level_transitioning = False
+                        break
                 elif npc.type == 'teleport' and not level_transitioning:
                     print("Телепортація на рівень level0...")
                     level_transitioning = True
                     level_path = LEVELS_DIR / "level0.lvl"
-                    level_data = parse_level_file(level_path)
-                    # ...existing code for level transition...
-                    # (перенесіть сюди код ініціалізації level0)
+                    player = None
+                    camera = None
+                    background_grid = None
+                    # Після цього цикл ініціалізує новий рівень автоматично
                     level_transitioning = False
                     break
 
         # --- Рендер меню налаштувань після обробки подій ---
         if showing_settings and is_paused:
-            render_settings_menu(screen, settings_menu_image, settings_menu_buttons, settings_button_positions, title_font, menu_font)
+            render_settings_menu(screen, settings_menu_image, settings_menu_buttons, settings_button_positions, title_font, settings_font, menu_font)
             pygame.display.flip()
             continue
         # --- Рендер меню паузи після обробки подій ---
