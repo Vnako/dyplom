@@ -37,16 +37,16 @@ class Player:
         self.speed = 7
         self.dx = 0
         self.dy = 0
-        self.health = 3
+        self.health = 100
         self.protection = 5
         self.luck = 1
-        self.atk = 5
+        self.atk = 10
         self.last_damage_time = 0  # Час останнього отримання шкоди
 
         # --- Додаємо змінні для гемів 5x5 ---
         for i in range(1, 6):
             for j in range(1, 6):
-                setattr(self, f"gem{i}{j}", True)
+                setattr(self, f"gem{i}{j}", False)
         self.gem_textures = gem_textures if gem_textures is not None else {}
 
     def handle_input(self, active_keys):
