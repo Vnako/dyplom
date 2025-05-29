@@ -11,6 +11,7 @@ from engine.entities import Player, Block, Enemy, Item, Npc, Camera, IntStat
 import tkinter as tk
 from tkinter import filedialog
 import random
+import datetime
 
 # Ініціалізація Pygame
 pygame.init()
@@ -426,12 +427,326 @@ except pygame.error as e:
     print(f"Помилка завантаження фонового зображення: {e}")
     sys.exit()
 
+SAVE_SLOTS = 3  # Number of save slots
+SAVES_DIR = BASE_DIR / "Saves"  # Use 'Saves' with capital S
+os.makedirs(SAVES_DIR, exist_ok=True)
+
+def get_save_path(slot):
+    return SAVES_DIR / f"save{slot}.json"
+
+def serialize_game_state():
+    """Serialize current game state for saving."""
+    if player is None or not hasattr(player, "rect"):
+        raise RuntimeError("Не можна зберегти гру: гра не запущена або гравець не ініціалізований!")
+    # Завжди зберігайте current level_path як відносний до LEVELS_DIR, якщо це можливо
+    try:
+        rel_path = level_path.relative_to(LEVELS_DIR)
+        level_path_str = str(rel_path)
+        is_relative = True
+    except ValueError:
+        level_path_str = str(level_path.resolve())
+        is_relative = False
+    # Зберігайте лише мінімальний стан, не зберігайте блоки/предмети/ворогів/статуї/нпс
+    return {
+        "level_path": level_path_str,
+        "level_path_relative": is_relative,
+        "player": {
+            "x": player.rect.x,
+            "y": player.rect.y,
+            "health": getattr(player, "health", 10),
+            "protection": getattr(player, "protection", 0),
+            "atk": getattr(player, "atk", 1),
+            "speed": getattr(player, "speed", 1),
+            "luck": getattr(player, "luck", 0),
+        },
+        "stats": {
+            "showing_stats": showing_stats
+        }
+        # НЕ зберігайте блоки/предмети/ворогів/статуї/нпс тут!
+    }
+
+def deserialize_game_state(state):
+    """Restore game state from loaded data."""
+    global level_path, player, camera, background_grid, showing_stats, blocks, enemies, items, statues, npcs
+    # Відновлення level_path з використанням відносної інформації, якщо це можливо
+    if state.get("level_path_relative"):
+        level_path = (LEVELS_DIR / state["level_path"]).resolve()
+    else:
+        level_path = Path(state["level_path"])
+    # Завжди повторно аналізуйте файл рівня, щоб отримати нову карту та об'єкти
+    level_data = parse_level_file(level_path)
+    player_data = state["player"]
+    player = create_player((player_data["x"] // TILE_SIZE, player_data["y"] // TILE_SIZE), textures)
+    player.rect.x = player_data["x"]
+    player.rect.y = player_data["y"]
+    player.health = player_data.get("health", 10)
+    player.protection = player_data.get("protection", 0)
+    player.atk = player_data.get("atk", 1)
+    player.speed = player_data.get("speed", 1)
+    player.luck = player_data.get("luck", 0)
+    showing_stats = state.get("stats", {}).get("showing_stats", False)
+    camera = Camera(level_data['width'] * TILE_SIZE, level_data['height'] * TILE_SIZE)
+    background_grid = generate_background_grid(textures, level_data, level_path.name)
+    # Відновлення всіх об'єктів з level_data (не з збереження)
+    blocks_set = {(block['x'], block['y']) for block in level_data['blocks']}
+    blocks = [
+        Block(
+            block['x'] * TILE_SIZE,
+            block['y'] * TILE_SIZE,
+            block['is_solid'],
+            determine_tree_texture(block['x'], block['y'], blocks_set, textures) if level_path.name == "level0.lvl" else determine_block_texture(block['x'], block['y'], blocks_set)
+        )
+        for block in level_data['blocks']
+    ]
+    enemy_textures = {
+        "zombie_left": textures["zombie_left"],
+        "zombie_right": textures["zombie_right"],
+        "zombie_back_left": textures["zombie_back_left"],
+        "zombie_back_right": textures["zombie_back_right"],
+        "skeleton_left": textures["skeleton_left"],
+        "skeleton_right": textures["skeleton_right"],
+        "skeleton_back_left": textures["skeleton_back_left"],
+        "skeleton_back_right": textures["skeleton_back_right"],
+        "boss_left": textures["boss_left"],
+        "boss_right": textures["boss_right"],
+        "boss_back_left": textures["boss_back_left"],
+        "boss_back_right": textures["boss_back_right"],
+    }
+    enemies = [
+        Enemy(
+            enemy['x'], enemy['y'], enemy_type_mapping.get(enemy['type'], 'zombie_left'), enemy_textures,
+            health={
+                'zombie': 1,
+                'skeleton': 3,
+                'boss': 5
+            }.get(enemy_type_mapping.get(enemy['type'], 'zombie_left'), 1)
+        ) for enemy in level_data['enemies']
+    ]
+    items = [
+        Item(item['x'] * TILE_SIZE, item['y'] * TILE_SIZE, item.get('is_solid', True), textures['item_frames'])
+        for item in level_data['items']
+    ]
+    statue_type_mapping_local = {f"statue{key}": value for key, value in statue_type_mapping.items()}
+    statues = [
+        IntStat(
+            statue['x'] * TILE_SIZE,
+            statue['y'] * TILE_SIZE,
+            statue.get('is_solid', True),
+            f"statue{statue['type']}",
+            textures
+        )
+        for statue in level_data['statues']
+    ]
+    npcs = [
+        Npc(
+            npc['x'] * TILE_SIZE,
+            npc['y'] * TILE_SIZE,
+            npc_type_mapping.get(npc['type'], 'teleport'),
+            {
+                'enter': textures['enter'],
+                'teleport': textures['teleport']
+            }
+        )
+        for npc in level_data['npc']
+    ]
+    # Тепер карта та всі об'єкти завжди узгоджені з файлом рівня
+
+def save_game(slot=1):
+    """Save current game state to a slot."""
+    try:
+        save_data = serialize_game_state()
+    except Exception as e:
+        print(f"Помилка збереження: {e}")
+        return
+    save_path = get_save_path(slot)
+    save_data["datetime"] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    # Write to a temp file first, then atomically replace
+    tmp_path = str(save_path) + ".tmp"
+    with open(tmp_path, "w", encoding="utf-8") as f:
+        json.dump(save_data, f, indent=4, ensure_ascii=False)
+    os.replace(tmp_path, save_path)
+    print(f"Гра збережена у слоті {slot} ({save_path})")
+
+def clear_saves():
+    """Clear all save files in the Saves directory."""
+    for slot in range(1, SAVE_SLOTS + 1):
+        save_path = get_save_path(slot)
+        if save_path.exists():
+            try:
+                save_path.unlink()
+            except Exception as e:
+                print(f"Не вдалося видалити {save_path}: {e}")
+
+def get_save_datetime(slot):
+    """Return the datetime string of the save slot, or None if not found."""
+    save_path = get_save_path(slot)
+    if not os.path.exists(save_path):
+        return None
+    try:
+        with open(save_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            return data.get("datetime")
+    except Exception:
+        return None
+
+def load_game(slot=1):
+    """Load game state from a save slot and restore it."""
+    save_path = get_save_path(slot)
+    if not os.path.exists(save_path):
+        print(f"Save slot {slot} is empty.")
+        return False
+    try:
+        with open(save_path, "r", encoding="utf-8") as f:
+            state = json.load(f)
+            deserialize_game_state(state)
+            print(f"Гра завантажена з слоту {slot} ({save_path})")
+            return True
+    except Exception as e:
+        print(f"Помилка завантаження гри з слоту {slot}: {e}")
+        return False
+
+def render_saves_menu(screen, menu_font, pause_menu_image, pause_menu_buttons, slot_count=SAVE_SLOTS, selected_slot=None):
+    """
+    Render a wide saves menu with slot selection and Save/Load/Back buttons.
+    Shows save date/time for each slot.
+    """
+    # Wide form background
+    wide_width = int(SCREEN_WIDTH * 0.7)
+    wide_height = int(SCREEN_HEIGHT * 0.7)
+    wide_x = (SCREEN_WIDTH - wide_width) // 2
+    wide_y = (SCREEN_HEIGHT - wide_height) // 2
+    wide_rect = pygame.Rect(wide_x, wide_y, wide_width, wide_height)
+    pygame.draw.rect(screen, (40, 40, 60), wide_rect, border_radius=30)
+    pygame.draw.rect(screen, (120, 120, 180), wide_rect, 4, border_radius=30)
+
+    saves_title = title_font.render("Збереження", True, (255, 255, 255))
+    saves_title_rect = saves_title.get_rect(center=(SCREEN_WIDTH // 2, wide_y + int(wide_height * 0.09)))
+    screen.blit(saves_title, saves_title_rect)
+    slot_rects = []
+    btn_w = pause_menu_buttons.get_width()
+    btn_h = pause_menu_buttons.get_height()
+    slot_area_x = wide_x + int(wide_width * 0.08)
+    slot_area_y = wide_y + int(wide_height * 0.18)
+    slot_area_w = wide_width - int(wide_width * 0.16)
+    slot_spacing = int((wide_height * 0.5) // slot_count)
+    slot_has_save = {}  # Track if slot has save
+    for i in range(1, slot_count + 1):
+        y = slot_area_y + (i - 1) * slot_spacing
+        # Slot background
+        slot_bg_rect = pygame.Rect(slot_area_x, y, slot_area_w, btn_h + 12)
+        pygame.draw.rect(screen, (60, 60, 90), slot_bg_rect, border_radius=12)
+        # Slot label
+        slot_label = menu_font.render(f"Слот {i}", True, (255, 255, 255))
+        slot_label_rect = slot_label.get_rect(midleft=(slot_area_x + 20, y + btn_h // 2 + 6))
+        screen.blit(slot_label, slot_label_rect)
+        # Date/time
+        dt = get_save_datetime(i)
+        has_save = dt is not None
+        slot_has_save[i] = has_save
+        dt_text = menu_font.render(dt if dt else "Порожньо", True, (180, 220, 180) if dt else (120, 120, 120))
+        dt_rect = dt_text.get_rect(midleft=(slot_area_x + 170, y + btn_h // 2 + 6))
+        screen.blit(dt_text, dt_rect)
+        # Select button
+        slot_btn_pos = (slot_area_x + slot_area_w - btn_w - 20, y + 6)
+        screen.blit(pause_menu_buttons, slot_btn_pos)
+        slot_btn_text = menu_font.render("Обрати", True, (255, 255, 255))
+        slot_btn_text_rect = slot_btn_text.get_rect(center=(slot_btn_pos[0] + btn_w // 2, slot_btn_pos[1] + btn_h // 2))
+        screen.blit(slot_btn_text, slot_btn_text_rect)
+        slot_rects.append((i, pygame.Rect(slot_btn_pos, (btn_w, btn_h))))
+    # Bottom buttons: only if slot selected
+    save_rect = load_rect = back_rect = None
+    bottom_y = wide_y + wide_height - btn_h - 24
+    if selected_slot is not None:
+        btn_x = wide_x + int(wide_width * 0.18)
+        # --- Only show "Save" button if in-game (showing_level == True) ---
+        if globals().get("showing_level", False):
+            # Save
+            save_btn_pos = (btn_x, bottom_y)
+            screen.blit(pause_menu_buttons, save_btn_pos)
+            save_text = menu_font.render("Зберегти", True, (255, 255, 255))
+            save_text_rect = save_text.get_rect(center=(save_btn_pos[0] + btn_w // 2, save_btn_pos[1] + btn_h // 2))
+            screen.blit(save_text, save_text_rect)
+            save_rect = pygame.Rect(save_btn_pos, (btn_w, btn_h))
+            btn_x += int(wide_width * 0.24)
+        # Load (only if slot has save)
+        if slot_has_save.get(selected_slot, False):
+            load_btn_pos = (btn_x, bottom_y)
+            screen.blit(pause_menu_buttons, load_btn_pos)
+            load_text = menu_font.render("Завантажити", True, (255, 255, 255))
+            load_text_rect = load_text.get_rect(center=(load_btn_pos[0] + btn_w // 2, load_btn_pos[1] + btn_h // 2))
+            screen.blit(load_text, load_text_rect)
+            load_rect = pygame.Rect(load_btn_pos, (btn_w, btn_h))
+            btn_x += int(wide_width * 0.24)
+        # Back
+        back_btn_pos = (wide_x + int(wide_width * 0.66), bottom_y)
+        screen.blit(pause_menu_buttons, back_btn_pos)
+        back_text = menu_font.render("Назад", True, (255, 255, 255))
+        back_text_rect = back_text.get_rect(center=(back_btn_pos[0] + btn_w // 2, back_btn_pos[1] + btn_h // 2))
+        screen.blit(back_text, back_text_rect)
+        back_rect = pygame.Rect(back_btn_pos, (btn_w, btn_h))
+    else:
+        # Only Back button if no slot selected
+        back_btn_pos = (wide_x + wide_width // 2 - btn_w // 2, bottom_y)
+        screen.blit(pause_menu_buttons, back_btn_pos)
+        back_text = menu_font.render("Назад", True, (255, 255, 255))
+        back_text_rect = back_text.get_rect(center=(back_btn_pos[0] + btn_w // 2, back_btn_pos[1] + btn_h // 2))
+        screen.blit(back_text, back_text_rect)
+        back_rect = pygame.Rect(back_btn_pos, (btn_w, btn_h))
+    return slot_rects, save_rect, load_rect, back_rect
+
+# --- Додаткові змінні для рівня ---
+player = None
+blocks = []
+enemies = []
+items = []
+statues = []
+npcs = []
+camera = None
+background_grid = None
+pressed_keys = set()
+level_data = None  # <-- Ensure this is defined globally
+
+def ensure_level_initialized():
+    """Initialize level data and objects if not already initialized (for loading saves from menu)."""
+    global player, camera, background_grid, blocks, level_data
+    if player is None or camera is None or background_grid is None:
+        if level_data is None:
+            # Use default level0.lvl if not set
+            default_level_path = LEVELS_DIR / "level0.lvl"
+            if not default_level_path.exists():
+                print("Default level0.lvl not found!")
+                return
+            level_data_local = parse_level_file(default_level_path)
+        else:
+            level_data_local = level_data
+        if level_data_local.get('player_start') is not None:
+            player_local = create_player(level_data_local['player_start'], textures)
+            blocks_set_local = {(block['x'], block['y']) for block in level_data_local['blocks']}
+            blocks_local = [
+                Block(
+                    block['x'] * TILE_SIZE,
+                    block['y'] * TILE_SIZE,
+                    block['is_solid'],
+                    determine_tree_texture(block['x'], block['y'], blocks_set_local, textures) if (level_path.name if 'level_path' in globals() else "level0.lvl") == "level0.lvl" else determine_block_texture(block['x'], block['y'], blocks_set_local)
+                )
+                for block in level_data_local['blocks']
+            ]
+            camera_local = Camera(level_data_local['width'] * TILE_SIZE, level_data_local['height'] * TILE_SIZE)
+            background_grid_local = generate_background_grid(textures, level_data_local, (level_path.name if 'level_path' in globals() else "level0.lvl"))
+            # Set globals
+            player = player_local
+            blocks[:] = blocks_local
+            camera = camera_local
+            background_grid = background_grid_local
+
 # Основний цикл
 running = True
 showing_menu = True
 showing_level = False
 is_paused = False
 showing_settings = False
+showing_saves = False  # Add flag for saves menu
+selected_save_slot = None  # <-- Add this line to define the variable
 level_transitioning = False
 showing_stats = False
 menu1_played = False
@@ -448,6 +763,7 @@ npcs = []
 camera = None
 background_grid = None
 pressed_keys = set()
+level_data = None  # <-- Ensure this is defined globally
 
 # --- Додаємо: збереження стану гемів між рівнями ---
 player_gems_state = {}
@@ -593,14 +909,38 @@ while running:
                             elif text == "Нова гра":
                                 showing_menu = False
                                 showing_level = True
+                                # Reset all game state for a new game
+                                level_path = LEVELS_DIR / "level0.lvl"
+                                player = None
+                                camera = None
+                                background_grid = None
+                                blocks = []
+                                enemies = []
+                                items = []
+                                statues = []
+                                npcs = []
+                                pressed_keys.clear()
+                                showing_stats = False
+                                is_paused = False
+                                showing_settings = False
+                                showing_saves = False
+                                selected_save_slot = None
+                                level_data = None
                                 debug_state()
-                                # Додайте break, щоб не обробляти події далі після перемикання стану
+                                break
+                            elif text == "Збереження":
+                                showing_menu = False
+                                showing_saves = True
+                                # --- Ensure level is initialized for loading ---
+                                ensure_level_initialized()
+                                debug_state()
                                 break
                             elif text == "Налаштування":
                                 showing_menu = False
                                 showing_settings = True
                                 debug_state()
                                 break
+
                 elif showing_settings:
                     for button_name, button_pos in settings_button_positions.items():
                         button_rect = settings_menu_buttons.get_rect(topleft=button_pos)
@@ -918,6 +1258,7 @@ while running:
                 continue
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 3:  # ПКМ
                 mouse_pos = event.pos
+
                 print(f"[DEBUG] ПКМ координати кліку: {mouse_pos}")
                 clicked_any_statue = False
                 for statue in statues:
@@ -1265,7 +1606,29 @@ while running:
                         pressed_keys.discard(event.key)
             pygame.display.flip()
             continue
-        # --- Рендер меню паузи після обробки подій ---
+        if showing_saves:
+            slot_rects, save_rect, load_rect, back_rect = render_saves_menu(screen, menu_font, pause_menu_image, pause_menu_buttons, SAVE_SLOTS, selected_save_slot)
+            pygame.display.flip()
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    running = False
+                elif event.type == pygame.MOUSEBUTTONDOWN:
+                    mouse_pos = event.pos
+                    for slot, rect in slot_rects:
+                        if rect.collidepoint(mouse_pos):
+                            selected_save_slot = slot
+                            break
+                    if back_rect and back_rect.collidepoint(mouse_pos):
+                        showing_saves = False
+                        is_paused = True
+                        selected_save_slot = None
+                        break
+                elif event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_ESCAPE:
+                        selected_save_slot = None
+                        showing_saves = False
+                        is_paused = True
+            continue
         if is_paused and not showing_stats and not showing_settings:
             render_pause_menu(screen, pause_menu_image, pause_menu_buttons, button_positions, title_font, font, menu_font)
             pygame.display.flip()
