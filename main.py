@@ -937,8 +937,9 @@ while running:
                             break
                     if back_rect and back_rect.collidepoint(mouse_pos):
                         showing_saves = False
-                        showing_menu = True
                         selected_save_slot = None
+                        if not showing_level and not is_paused:
+                            showing_menu = True
                         break
                 else:
                     # --- Only allow saving if in-game ---
@@ -950,8 +951,17 @@ while running:
                         loaded = load_game(selected_save_slot)
                         if loaded:
                             showing_saves = False
+                            selected_save_slot = None
+                            # Always switch to level mode after loading any save from menu, even before first game start
+                            showing_menu = False
                             showing_level = True
-                        selected_save_slot = None
+                            is_paused = False
+                            # Reset all state that could interfere with new level
+                            pressed_keys.clear()
+                            # Also reset menu1_played so music transitions correctly
+                            menu1_played = True
+                        else:
+                            selected_save_slot = None
                         break
                     elif back_rect and back_rect.collidepoint(mouse_pos):
                         selected_save_slot = None
@@ -962,7 +972,9 @@ while running:
                         selected_save_slot = None
                     else:
                         showing_saves = False
-                        showing_menu = True
+                        selected_save_slot = None
+                        if not showing_level and not is_paused:
+                            showing_menu = True
     elif showing_level:
         # Якщо ми тут, значить showing_level == True
         # Відображення рівня

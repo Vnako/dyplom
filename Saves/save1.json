@@ -1,0 +1,17 @@
+{
+    "level_path": "level1.lvl",
+    "level_path_relative": true,
+    "player": {
+        "x": 260,
+        "y": 2604,
+        "health": 3,
+        "protection": 5,
+        "atk": 5,
+        "speed": 12,
+        "luck": 1
+    },
+    "stats": {
+        "showing_stats": false
+    },
+    "datetime": "2025-05-29 10:42:01"
+}
