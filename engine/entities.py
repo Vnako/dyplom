@@ -25,7 +25,7 @@ class Block:
         screen.blit(self.texture, camera.apply(self))
 
 class Player:
-    def __init__(self, pos, textures):
+    def __init__(self, pos, textures, gem_textures=None):
         """
         Ініціалізує гравця.
         :param pos: Початкова позиція гравця (x, y)
@@ -34,14 +34,20 @@ class Player:
         self.textures = textures  # Assign textures to self.textures
         self.rect = pygame.Rect(pos[0], pos[1], self.textures['player_left'].get_width(), self.textures['player_left'].get_height())
         self.texture = textures['player_left']  # Початкова текстура
-        self.speed = 12
+        self.speed = 7
         self.dx = 0
         self.dy = 0
-        self.health = 3
+        self.health = 100
         self.protection = 5
         self.luck = 1
-        self.atk = 5
+        self.atk = 10
         self.last_damage_time = 0  # Час останнього отримання шкоди
+
+        # --- Додаємо змінні для гемів 5x5 ---
+        for i in range(1, 6):
+            for j in range(1, 6):
+                setattr(self, f"gem{i}{j}", False)
+        self.gem_textures = gem_textures if gem_textures is not None else {}
 
     def handle_input(self, active_keys):
         """
@@ -68,6 +74,10 @@ class Player:
         elif pygame.K_s in active_keys:  # Нижня клавіша (S)
             self.dy = self.speed
             self.texture = self.textures['player_left']
+            if pygame.K_a in active_keys:  # Якщо рух вліво
+                self.texture = self.textures['player_left']
+            elif pygame.K_d in active_keys:  # Якщо рух вправо
+                self.texture = self.textures['player_right']
 
     def update(self, blocks, items, statues):
         """
@@ -444,7 +454,7 @@ class Npc:
 
         :param x: Координата X
         :param y: Координата Y
-        :param npc_type: Тип NPC ('teleport', 'enemy', 'statue4', 'statue5', 'statue6', 'statue7', 'statue8')
+        :param npc_type: Тип NPC ('teleport', 'enemy')
         :param textures: Словник текстур для npc_type
         """
         self.rect = pygame.Rect(x, y, TILE_SIZE, TILE_SIZE)
