@@ -1,26 +1,26 @@
 import sys
 import json
 from pathlib import Path
-from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QTableWidget, QTableWidgetItem, QHBoxLayout, QMenuBar, QAction, QFileDialog, QMessageBox, QLineEdit, QPushButton, QInputDialog, QMenu, QFrame, QLabel
-from PyQt5.QtGui import QColor, QFont, QIcon, QPixmap, QPainter, QBrush
-from PyQt5.QtCore import Qt, QSize
-from PyQt5.QtWidgets import QDesktopWidget
-from editor_logic import load_level, save_edit, update_level_table, fill_with_spaces, save_table_to_file
+from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QTableWidget, QTableWidgetItem, QHBoxLayout, QMenuBar, QAction, QFileDialog, QMessageBox, QLineEdit, QPushButton, QInputDialog, QMenu, QLabel, QShortcut
+from PyQt5.QtGui import QColor, QFont, QIcon, QPixmap, QPainter, QKeySequence
+from PyQt5.QtCore import Qt, QSize, QTimer, QUrl
+from PyQt5.QtGui import QDesktopServices
+from editor_logic import save_edit, update_level_table, fill_with_spaces, save_table_to_file
 
 BASE_DIR = Path(__file__).resolve().parent
-ASSETS_DIR = BASE_DIR / "cli" / "cli_assets"
+ASSETS_DIR = BASE_DIR / "cli_assets"
 
 class LevelEditorApp(QWidget):
     def __init__(self):
         super().__init__()
-        
-        self.setWindowTitle('Редактор рівнів')
-        self.current_file_path = None  # Додано для зберігання шляху до файлу
-        self.is_modified = False  # Додано для відстеження змін
+        self.setWindowTitle('Редактор рівнів Slime Quest: Dungeon')
+        self.current_file_path = None
+        self.is_modified = False
 
-        # Встановлення вікна на максимальну висоту екрану
-        screen_geometry = QDesktopWidget().availableGeometry()
-        self.setGeometry(100, 100, 1000, screen_geometry.height())
+        screen = QApplication.primaryScreen()
+        screen_geometry = screen.availableGeometry()
+        window_size = screen_geometry.height()
+        self.resize(window_size, window_size)
 
         self.layout = QVBoxLayout()
 
@@ -135,8 +135,9 @@ class LevelEditorApp(QWidget):
         self.fill_empty_button.setShortcut("6")
         utility_layout.addWidget(self.fill_empty_button)
 
-        self.clear_button = self.create_image_button('Очистити', '.', center_text=True)
-        self.clear_button.setShortcut("Backspace")
+        self.clear_button = self.create_image_button('Очистити все', '.', center_text=True)
+        self.clear_button.clicked.disconnect()  # Remove previous connection if any
+        self.clear_button.clicked.connect(self.clear_all_cells)
         utility_layout.addWidget(self.clear_button)
 
         self.layout.addLayout(utility_layout)
@@ -149,6 +150,13 @@ class LevelEditorApp(QWidget):
         # Enable custom context menu for the table
         self.level_table.setContextMenuPolicy(Qt.CustomContextMenu)
         self.level_table.customContextMenuRequested.connect(self.show_context_menu)
+
+        # Наприклад, для кнопки "Очистити все"
+        QShortcut(QKeySequence("Ctrl+Del"), self, activated=self.clear_all_cells)
+        QShortcut(QKeySequence("Ctrl+Backspace"), self, activated=self.clear_all_cells)
+
+        # Додаємо гарячу клавішу Backspace для очищення виділеної області
+        QShortcut(QKeySequence("Backspace"), self.level_table, activated=self.clear_selected_cells)
 
     def init_menu(self):
         # Меню "Файл"
@@ -194,11 +202,13 @@ class LevelEditorApp(QWidget):
 
         zoom_in_action = QAction("Збільшити", self)
         zoom_in_action.setShortcut("Ctrl+WheelUp")
+        zoom_in_action.setShortcut(QKeySequence("Ctrl++"))
         zoom_in_action.triggered.connect(self.zoom_in)
         view_menu.addAction(zoom_in_action)
 
         zoom_out_action = QAction("Зменшити", self)
         zoom_out_action.setShortcut("Ctrl+WheelDown")
+        zoom_out_action.setShortcut(QKeySequence("Ctrl+-"))
         zoom_out_action.triggered.connect(self.zoom_out)
         view_menu.addAction(zoom_out_action)
 
@@ -207,6 +217,14 @@ class LevelEditorApp(QWidget):
         about_action = QAction("Про програму", self)
         about_action.triggered.connect(self.show_about)
         help_menu.addAction(about_action)
+        
+        inst1 = QAction("Інструкція розробника", self)
+        inst1.triggered.connect(self.open_instruction1_html)
+        help_menu.addAction(inst1)
+        
+        inst2 = QAction("Інструкція користувача", self)
+        inst1.triggered.connect(self.open_instruction2_html)
+        help_menu.addAction(inst2)
 
         # Оновлення стану пташок для тем після створення атрибутів
         self.update_theme_checkmarks()
@@ -216,7 +234,7 @@ class LevelEditorApp(QWidget):
         button.setStyleSheet("border: none; background-color: transparent;")  # Приховуємо межі кнопки
 
         # Завантаження основного зображення кнопки
-        pixmap = QPixmap("cli_assets/button_sm.png")
+        pixmap = QPixmap(str(ASSETS_DIR / "button_sm.png"))
         if pixmap.isNull():
             QMessageBox.critical(self, "Помилка", f"Не вдалося завантажити зображення: cli_assets/button_sm.png")
             return button
@@ -281,7 +299,7 @@ class LevelEditorApp(QWidget):
                     json.dump(level_data, f, indent=4)
 
                 self.current_file_path = file_path
-                self.setWindowTitle(f"Редактор рівнів ({file_path.name})")
+                self.setWindowTitle(f"Редактор рівнів Slime Quest: Dungeon ({file_path.name})")
                 self.update_level_table()
                 QMessageBox.information(self, "Успіх", "Новий файл успішно створено!")
         except Exception as e:
@@ -289,35 +307,35 @@ class LevelEditorApp(QWidget):
 
     def open_level(self):
         file_path, _ = QFileDialog.getOpenFileName(self, "Виберіть файл рівня", str(Path("levels")), "Level Files (*.lvl)")
-        if file_path:
-            file_path = Path(file_path)
-            try:
-                with file_path.open('r') as f:
-                    level_data = json.load(f)
-                    if level_data.get("file_type") != "level_json":
-                        raise ValueError("Неправильний формат файлу!")
+        if not file_path or not Path(file_path).is_file():
+            return  # Користувач натиснув "Відміна" або не вибрав файл, або вийшов з папки
+        file_path = Path(file_path)
+        try:
+            with file_path.open('r') as f:
+                level_data = json.load(f)
+                if level_data.get("file_type") != "level_json":
+                    raise ValueError("Неправильний формат файлу!")
 
-                    self.width_input.setText(str(level_data.get("width", "")))
-                    self.height_input.setText(str(level_data.get("height", "")))
-                    self.update_level_table()
+                self.width_input.setText(str(level_data.get("width", "")))
+                self.height_input.setText(str(level_data.get("height", "")))
+                self.update_level_table()
 
-                    for y, row in enumerate(level_data.get("content", [])):
-                        for x, cell in enumerate(row):
-                            item = QTableWidgetItem()
-                            if cell in self.images:
-                                # Якщо символ відповідає іконці, додаємо іконку
-                                item.setIcon(QIcon(self.images[cell].scaled(30, 30, Qt.KeepAspectRatio)))
-                                item.setText("")  # Очищуємо текст
-                            else:
-                                # Якщо символ не відповідає іконці, додаємо текст
-                                item.setText(cell)
-                            item.setBackground(QColor("#ebfbff"))  # Фон як у порожньої клітинки
-                            self.level_table.setItem(y, x, item)
+                for y, row in enumerate(level_data.get("content", [])):
+                    for x, cell in enumerate(row):
+                        item = QTableWidgetItem()
+                        if cell in self.images:
+                            item.setIcon(QIcon(self.images[cell].scaled(30, 30, Qt.KeepAspectRatio)))
+                            item.setText(cell)
+                            item.setForeground(QColor("#ebfbff"))
+                        else:
+                            item.setText(cell)
+                        item.setBackground(QColor("#ebfbff"))
+                        self.level_table.setItem(y, x, item)
 
-                    self.current_file_path = file_path
-                    self.setWindowTitle(f"Редактор рівнів для гри Slime Quest: Dungeon ({file_path.name})")
-            except Exception as e:
-                QMessageBox.critical(self, "Помилка", f"Не вдалося завантажити рівень: {e}")
+                self.current_file_path = file_path
+                self.setWindowTitle(f"Редактор рівнів для гри Slime Quest: Dungeon ({file_path.name})")
+        except Exception as e:
+            QMessageBox.critical(self, "Помилка", f"Не вдалося завантажити рівень: {e}")
 
     def save_level(self):
         if self.current_file_path:
@@ -375,6 +393,51 @@ class LevelEditorApp(QWidget):
             QMessageBox.warning(self, "Попередження", "Виберіть область для додавання!")
             return
 
+        # Для '@' та '3' переміщуємо, якщо вже існує
+        if char in ('@', '3'):
+            found = None
+            for row in range(self.level_table.rowCount()):
+                for col in range(self.level_table.columnCount()):
+                    item = self.level_table.item(row, col)
+                    if item and item.text() == char:
+                        found = (row, col)
+                        break
+                if found:
+                    break
+
+            # Додаємо тільки в першу виділену клітинку
+            first_range = selected_ranges[0]
+            target_row = first_range.topRow()
+            target_col = first_range.leftColumn()
+
+            if found:
+                # Якщо вже на цій клітинці — нічого не робимо
+                if found == (target_row, target_col):
+                    return
+                # Очищаємо попередню клітинку
+                prev_item = self.level_table.item(found[0], found[1])
+                if prev_item:
+                    prev_item.setIcon(QIcon())
+                    prev_item.setText(" ")
+                    prev_item.setBackground(QColor("#ebfbff"))
+
+            # Додаємо на нову клітинку
+            item = self.level_table.item(target_row, target_col)
+            if not item:
+                item = QTableWidgetItem()
+                self.level_table.setItem(target_row, target_col, item)
+            if char in self.images:
+                item.setIcon(QIcon(self.images[char].scaled(30, 30, Qt.KeepAspectRatio)))
+                item.setText(char)
+                item.setForeground(QColor("#ebfbff"))
+                item.setBackground(QColor("#ebfbff"))
+            else:
+                item.setText(char)
+                item.setTextAlignment(Qt.AlignCenter)
+                item.setBackground(QColor("#ebfbff"))
+            self.mark_as_modified()
+            return
+        
         for selected_range in selected_ranges:
             for row in range(selected_range.topRow(), selected_range.bottomRow() + 1):
                 for col in range(selected_range.leftColumn(), selected_range.rightColumn() + 1):
@@ -553,7 +616,7 @@ class LevelEditorApp(QWidget):
         add_player_action.triggered.connect(lambda: self.add_element('@'))
         menu.addAction(add_player_action)
         
-        add_item_action = QAction("Додати предмет", self)
+        add_item_action = QAction("Додати скриню", self)
         add_item_action.triggered.connect(lambda: self.add_element('*'))
         menu.addAction(add_item_action)
         
@@ -572,6 +635,50 @@ class LevelEditorApp(QWidget):
         """Оновлює розмір фонового зображення при зміні розміру вікна."""
         self.background_label.setGeometry(self.rect())  # Оновлюємо розмір QLabel
         super().resizeEvent(event)
+
+    def clear_all_cells(self):
+        self.undo_stack.append(self.snapshot_level())
+        """Очищає всі клітинки таблиці (ставить пробіл, фон, прибирає іконки)."""
+        for row in range(self.level_table.rowCount()):
+            for col in range(self.level_table.columnCount()):
+                item = self.level_table.item(row, col)
+                if not item:
+                    item = QTableWidgetItem()
+                    self.level_table.setItem(row, col, item)
+                item.setIcon(QIcon())
+                item.setText(" ")
+                item.setBackground(QColor("#ebfbff"))
+        self.mark_as_modified()
+
+    def clear_selected_cells(self):
+        self.undo_stack.append(self.snapshot_level())
+        """Очищає всі виділені клітинки таблиці (ставить пробіл, фон, прибирає іконки)."""
+        selected_ranges = self.level_table.selectedRanges()
+        for selected_range in selected_ranges:
+            for row in range(selected_range.topRow(), selected_range.bottomRow() + 1):
+                for col in range(selected_range.leftColumn(), selected_range.rightColumn() + 1):
+                    item = self.level_table.item(row, col)
+                    if not item:
+                        item = QTableWidgetItem()
+                        self.level_table.setItem(row, col, item)
+                    item.setIcon(QIcon())
+                    item.setText(" ")
+                    item.setBackground(QColor("#ebfbff"))
+        self.mark_as_modified()
+
+    def open_instruction1_html(self):
+        instruction_path = BASE_DIR / "instruction1.html"
+        if instruction_path.exists():
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(instruction_path.resolve())))
+        else:
+            QMessageBox.warning(self, "Файл не знайдено", f"Файл {instruction_path} не знайдено.")
+            
+    def open_instruction2_html(self):
+        instruction_path = BASE_DIR / "instruction2.html"
+        if instruction_path.exists():
+            QDesktopServices.openUrl(QUrl.fromLocalFile(str(instruction_path.resolve())))
+        else:
+            QMessageBox.warning(self, "Файл не знайдено", f"Файл {instruction_path} не знайдено.")
 
 def fill_with_hash(level_table, images):
     """Заповнює всі виділені клітинки таблиці символом #, іконкою icon_wall.png та фоном #080D21."""
@@ -592,4 +699,12 @@ if __name__ == '__main__':
     app = QApplication(sys.argv)
     window = LevelEditorApp()
     window.show()
+    # Центрування після show() і після всіх layout-ів
+    def center_window():
+        screen = QApplication.primaryScreen()
+        screen_geometry = screen.availableGeometry()
+        x = (screen_geometry.width() - window.frameGeometry().width()) // 2
+        y = (screen_geometry.height() - window.frameGeometry().height()) // 2
+        window.move(x, y)
+    QTimer.singleShot(0, center_window)
     sys.exit(app.exec_())

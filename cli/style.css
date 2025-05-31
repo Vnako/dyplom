@@ -1,0 +1,30 @@
+body {
+    background: url('cli_assets/background_light.png') no-repeat fixed center;
+    background-size: cover;
+    font-family: "Nimbus Mono PS", "Courier New", monospace;
+    color: #030529;
+    font-size: 18px;
+    align-items: center;
+    justify-content: center; 
+}
+
+section {
+    background-color: #8eff9469;
+    border: 10px solid #092b06ab;
+    border-radius: 10px;
+    width: 80%;
+    margin: 20px auto;
+    padding: 20px;
+    box-shadow: 0 0 10px rgba(5, 63, 8, 0.473);
+    display: grid;
+    justify-content: center;
+}
+h1 {
+    font-size: 36px;
+    text-align: center;
+}
+h2 {
+    margin: 0 27px;
+    font-size: 24px;
+    text-align: center;
+}

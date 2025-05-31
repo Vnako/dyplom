@@ -18,10 +18,6 @@ def save_level(level_name, width=None, height=None, folder="levels"):
         json.dump(level_data, f, indent=4)
     return filepath
 
-def load_level(file_path):
-    with open(file_path, 'r') as f:
-        return json.load(f)
-
 def open_create_level_window(parent):
     create_window = QWidget()
     create_window.setWindowTitle('Введіть назву рівня')
@@ -128,7 +124,7 @@ def open_edit_level_window(parent, level_filename, content=""):
     utility_layout.addWidget(fill_empty_button)
 
     clear_button = QPushButton('Очистити (.)')
-    clear_button.clicked.connect(lambda: fill_area(level_table, ' '))
+    clear_button.clicked.connect(lambda: fill_with_spaces(level_table))
     utility_layout.addWidget(clear_button)
 
     layout.addLayout(utility_layout)
@@ -164,14 +160,29 @@ def add_enemy(level_table, x_input, y_input, enemy_type, single_instance=False):
             raise ValueError('Координати повинні бути додатними числами!')
 
         if single_instance:
-            # Перевірка, чи ворог вже існує, і переміщення його на нову позицію
+            found = None
             for row in range(level_table.rowCount()):
                 for col in range(level_table.columnCount()):
                     if level_table.item(row, col) and level_table.item(row, col).text() == enemy_type:
-                        level_table.setItem(row, col, QTableWidgetItem(' '))
+                        found = (row, col)
                         break
-
-        level_table.setItem(y, x, QTableWidgetItem(enemy_type))
+                if found:
+                    break
+            if found:
+                # If trying to add to the same cell, do nothing
+                if found == (y, x):
+                    return
+                # Move: remove from old, add to new
+                level_table.setItem(found[0], found[1], QTableWidgetItem(' '))
+                level_table.setItem(y, x, QTableWidgetItem(enemy_type))
+                return
+            else:
+                # Not found, just add
+                level_table.setItem(y, x, QTableWidgetItem(enemy_type))
+                return
+        else:
+            # For non-single_instance enemies, allow multiple
+            level_table.setItem(y, x, QTableWidgetItem(enemy_type))
     except ValueError as e:
         show_error(level_table, f"Помилка: {e}")
 
@@ -183,14 +194,26 @@ def add_player(level_table, x_input, y_input):
         if x < 0 or y < 0:
             raise ValueError('Координати повинні бути додатними числами!')
 
-        # Перевірка, чи гравець вже існує, і переміщення його на нову позицію
+        found = None
         for row in range(level_table.rowCount()):
             for col in range(level_table.columnCount()):
                 if level_table.item(row, col) and level_table.item(row, col).text() == '@':
-                    level_table.setItem(row, col, QTableWidgetItem(' '))
+                    found = (row, col)
                     break
-
-        level_table.setItem(y, x, QTableWidgetItem('@'))
+            if found:
+                break
+        if found:
+            # If trying to add to the same cell, do nothing
+            if found == (y, x):
+                return
+            # Move: remove from old, add to new
+            level_table.setItem(found[0], found[1], QTableWidgetItem(' '))
+            level_table.setItem(y, x, QTableWidgetItem('@'))
+            return
+        else:
+            # Not found, just add
+            level_table.setItem(y, x, QTableWidgetItem('@'))
+            return
     except ValueError as e:
         show_error(level_table, f"Помилка: {e}")
 
