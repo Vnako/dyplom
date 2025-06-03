@@ -184,14 +184,16 @@ class Camera:
         """
         Оновлює положення камери відповідно до положення гравця.
         """
-        x = -target.rect.centerx + 1920 // 2
-        y = -target.rect.centery + 1080 // 2
+        display_info = pygame.display.Info()
+        SCREEN_WIDTH, SCREEN_HEIGHT = display_info.current_w, display_info.current_h
+        x = -target.rect.centerx + SCREEN_WIDTH // 2
+        y = -target.rect.centery + SCREEN_HEIGHT // 2
 
         # Обмеження камери в межах рівня
         x = min(0, x)  # Ліва межа
         y = min(0, y)  # Верхня межа
-        x = max(-(self.width - 1920), x)  # Права межа
-        y = max(-(self.height - 1080), y)  # Нижня межа
+        x = max(-(self.width - SCREEN_WIDTH), x)  # Права межа
+        y = max(-(self.height - SCREEN_HEIGHT), y)  # Нижня межа
 
         self.camera_rect = pygame.Rect(x, y, self.width, self.height)
 
