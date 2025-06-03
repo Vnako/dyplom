@@ -1010,6 +1010,7 @@ while running:
                     overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
                     screen.blit(overlay, (0, 0))
                     render_settings_menu(screen, settings_menu_image, settings_menu_buttons, settings_button_positions, title_font, settings_font, menu_font)
+                    cursor.draw(screen)
                     pygame.display.flip()
                     if event.type == pygame.KEYDOWN:
                         if event.key == pygame.K_ESCAPE:
@@ -1672,10 +1673,12 @@ while running:
                 elif event.type == pygame.KEYUP:
                     if event.key in pressed_keys:
                         pressed_keys.discard(event.key)
+            cursor.draw(screen)
             pygame.display.flip()
             continue
         elif showing_saves:
             slot_rects, save_rect, load_rect, back_rect = render_saves_menu(screen, menu_font, pause_menu_image, pause_menu_buttons, SAVE_SLOTS, selected_save_slot)
+            cursor.draw(screen)
             pygame.display.flip()
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
@@ -2000,10 +2003,9 @@ while running:
                 elif event.type == pygame.KEYUP:
                     if event.key in pressed_keys:
                         pressed_keys.discard(event.key)
-
                         cursor.draw(screen)
                         pygame.display.flip()
-            continue
+                continue
 
         if showing_saves:
             slot_rects, save_rect, load_rect, back_rect = render_saves_menu(screen, menu_font, pause_menu_image, pause_menu_buttons, SAVE_SLOTS, selected_save_slot)
@@ -2152,6 +2154,7 @@ while running:
 
         if showing_saves:
             slot_rects, save_rect, load_rect, back_rect = render_saves_menu(screen, menu_font, pause_menu_image, pause_menu_buttons, SAVE_SLOTS, selected_save_slot)
+            cursor.draw(screen)
             pygame.display.flip()
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
@@ -2179,7 +2182,6 @@ while running:
             pygame.display.flip()
             continue  # Просто малюємо меню паузи і переходимо до наступного кадру
         cursor.draw(screen)
-
         pygame.display.flip()
         continue
     elif showing_saves:
@@ -2196,6 +2198,7 @@ while running:
         rotated_rect = rotated_image.get_rect(center=rotating_image_rect.center)
         screen.blit(rotated_image, rotated_rect.topleft)
         slot_rects, save_rect, load_rect, back_rect = render_saves_menu(screen, menu_font, pause_menu_image, pause_menu_buttons, SAVE_SLOTS, selected_save_slot)
+        cursor.draw(screen)
         pygame.display.flip()
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -2254,6 +2257,7 @@ while running:
     elif showing_game_over:
         screen.blit(mainmenu_bg, (0, 0))
         button_rect = render_game_over(screen, title_font, menu_font)
+        cursor.draw(screen)
         pygame.display.flip()
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -2308,7 +2312,7 @@ while running:
                     statues_state = {}
                     break
         continue
-        cursor.draw(screen)
+    cursor.draw(screen)
     pygame.display.flip()
 pygame.quit()
 print("Програма завершена")  # Додано: журнал для перевірки завершення програми
