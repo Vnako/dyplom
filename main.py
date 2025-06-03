@@ -89,7 +89,7 @@ def update_scaled_images():
     # Оновлення зображення паузи
     try:
         pause_menu_image = pygame.image.load(str(INTERFACE_DIR / "menu.png")).convert_alpha()
-        # Масштабування не застосовується, якщо не потрібно
+        pause_menu_image = pygame.transform.smoothscale(pause_menu_image, (int(SCREEN_WIDTH * 0.25), int(SCREEN_HEIGHT * 0.65)))
     except pygame.error as e:
         print(f"Помилка завантаження зображення паузи: {e}")
         sys.exit()
@@ -97,7 +97,7 @@ def update_scaled_images():
     # Оновлення зображення кнопок паузи
     try:
         pause_menu_buttons = pygame.image.load(str(INTERFACE_DIR / "button.png")).convert_alpha()
-        # Масштабування не застосовується, якщо не потрібно
+        pause_menu_buttons = pygame.transform.smoothscale(pause_menu_buttons, (int(SCREEN_WIDTH * 0.17), int(SCREEN_HEIGHT * 0.08)))
     except pygame.error as e:
         print(f"Помилка завантаження зображення кнопок: {e}")
         sys.exit()
@@ -105,14 +105,14 @@ def update_scaled_images():
     # Оновлення зображення меню налаштувань
     try:
         settings_menu_image = pygame.image.load(str(INTERFACE_DIR / "settings_menu.png")).convert_alpha()
-        # Масштабування не застосовується, якщо не потрібно
+        settings_menu_image = pygame.transform.smoothscale(settings_menu_image, (int(SCREEN_WIDTH * 0.775), int(SCREEN_HEIGHT * 0.73)))
     except pygame.error as e:
         print(f"Помилка завантаження зображення меню налаштувань: {e}")
         sys.exit()
 
     try:
         settings_menu_buttons = pygame.image.load(str(INTERFACE_DIR / "button.png")).convert_alpha()
-        # Масштабування не застосовується, якщо не потрібно
+        settings_menu_buttons = pygame.transform.smoothscale(settings_menu_buttons, (int(SCREEN_WIDTH * 0.17), int(SCREEN_HEIGHT * 0.08)))
     except pygame.error as e:
         print(f"Помилка завантаження зображення кнопок: {e}")
         sys.exit()
@@ -120,7 +120,7 @@ def update_scaled_images():
     # Оновлення зображення стрілки
     try:
         arrow_image = pygame.image.load(str(INTERFACE_DIR / "arrow.png")).convert_alpha()
-        # Масштабування не застосовується, якщо не потрібно
+        arrow_image = pygame.transform.smoothscale(arrow_image, (int(SCREEN_WIDTH * 0.05), int(SCREEN_HEIGHT * 0.05)))
     except pygame.error as e:
         print(f"Помилка завантаження зображення стрілки: {e}")
         sys.exit()
