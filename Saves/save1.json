@@ -1,17 +1,22 @@
 {
-    "level_path": "level1.lvl",
+    "level_path": "level0.lvl",
     "level_path_relative": true,
     "player": {
-        "x": 260,
-        "y": 2604,
-        "health": 3,
+        "x": 1200,
+        "y": 600,
+        "health": 100,
         "protection": 5,
-        "atk": 5,
-        "speed": 12,
+        "atk": 10,
+        "speed": 7,
         "luck": 1
     },
     "stats": {
         "showing_stats": false
     },
-    "datetime": "2025-05-29 10:42:01"
+    "completed_levels": [],
+    "defeated_enemies": [],
+    "opened_chests": [],
+    "collected_gems": [],
+    "upgraded_statues": [],
+    "datetime": "2025-06-03 00:17:36"
 }

@@ -143,20 +143,19 @@ class Player:
         :param enemy_rect: Прямокутник ворога, який завдав шкоди
         """
         current_time = pygame.time.get_ticks()
-        if current_time - self.last_damage_time >= 300:  # 300 мс затримки
-            self.health -= amount
-            self.last_damage_time = current_time
+        self.health -= amount
+        self.last_damage_time = current_time
 
-            if enemy_rect:
+        if enemy_rect:
                 # Тимчасове зміщення текстури гравця
                 offset_x = 10 if self.rect.centerx < enemy_rect.centerx else -10
                 offset_y = 10 if self.rect.centery < enemy_rect.centery else -10
                 self.rect.move_ip(offset_x, offset_y)
-
+                pygame.time.delay(300)  # Затримка 0,3 секунди для візуального ефекту
                 # Повернення до початкової позиції
                 self.rect.move_ip(-offset_x, -offset_y)
 
-            if self.health <= 0:
+        if self.health <= 0:
                 print("Гравець помер")
                 self.health = 0
 
