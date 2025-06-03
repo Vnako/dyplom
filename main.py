@@ -4,10 +4,10 @@ import json
 import os
 from pathlib import Path
 from engine.loader import (
-    load_textures, generate_background_grid, determine_tree_texture, render_background, enemy_type_mapping, npc_type_mapping, statue_type_mapping, load_grass_textures, draw_player_gems
+    load_cursor, load_textures, generate_background_grid, determine_tree_texture, render_background, enemy_type_mapping, npc_type_mapping, statue_type_mapping, load_grass_textures, draw_player_gems
 )
 from engine.parser import parse_level_file
-from engine.entities import Player, Block, Enemy, Item, Npc, Camera, IntStat
+from engine.entities import Player, Block, Enemy, Item, Npc, Camera, IntStat, Cursor
 import tkinter as tk
 from tkinter import filedialog
 import random
@@ -28,6 +28,13 @@ TILE_SIZE = 100
 screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.RESIZABLE)
 pygame.display.set_caption("Slime Quest: Dungeon")
 clock = pygame.time.Clock()
+
+# Загружаем курсор
+cursor_img = load_cursor()
+cursor = Cursor(cursor_img)
+
+# Прячем системный курсор
+pygame.mouse.set_visible(False)
 
 # Шляхи до ресурсів
 BASE_DIR = Path(__file__).resolve().parent
@@ -388,6 +395,7 @@ def set_default_settings():
     pygame.mixer.music.set_volume(globals()["current_volume"])
     # Примусове перемальовування меню налаштувань
     render_settings_menu(screen, settings_menu_image, settings_menu_buttons, settings_button_positions, title_font, settings_font, menu_font)
+    cursor.draw(screen)
     pygame.display.flip()
     
 def create_player(player_start, textures):
@@ -827,6 +835,49 @@ current_music = None
 selected_save_slot = None
 level_transitioning = False
 
+# --- Додаємо змінну для відстеження переходу на новий рівень після босса ---
+boss_defeated_and_portal_used = False
+
+# --- Track current level number for cycling ---
+current_level_number = 1  # Start from level1.lvl after cave
+
+# --- Damage popups ---
+damage_popups = []
+
+def add_damage_popup(x, y, value, color=(255, 0, 0)):
+    """Add a damage popup at (x, y) with value and color."""
+    damage_popups.append({
+        "x": x,
+        "y": y,
+        "value": value,
+        "color": color,
+        "timer": 40,  # frames to show
+        "alpha": 255
+    })
+
+def update_and_draw_damage_popups(screen, camera):
+    """Update and draw all damage popups."""
+    global damage_popups
+    new_popups = []
+    for popup in damage_popups:
+        # Move up
+        popup["y"] -= 1
+        popup["timer"] -= 1
+        # Fade out
+        if popup["timer"] < 15:
+            popup["alpha"] = int(255 * popup["timer"] / 15)
+        # Draw
+        font_popup = pygame.font.Font("assets/fonts/Hitch-hike.otf", 32)
+        text = font_popup.render(str(popup["value"]), True, popup["color"])
+        text.set_alpha(popup["alpha"])
+        # --- FIX: Use camera.apply_rect on a Rect, not camera.apply on a tuple ---
+        popup_rect = pygame.Rect(int(popup["x"]), int(popup["y"]), 1, 1)
+        pos = camera.apply_rect(popup_rect).topleft
+        screen.blit(text, pos)
+        if popup["timer"] > 0:
+            new_popups.append(popup)
+    damage_popups = new_popups
+
 while running:
     clock.tick(60)
     global rotating_image, rotating_image_rect, rotation_angle
@@ -891,6 +942,8 @@ while running:
                 screen.blit(arrow_image, arrow_pos)
                 arrow_drawn = True  # Встановлюємо флаг, щоб стрілка відображалася лише один раз
 
+        # --- draw cursor before flip ---
+        cursor.draw(screen)
         pygame.display.flip()
 
         # Обробка подій
@@ -925,6 +978,8 @@ while running:
                                 showing_saves = False
                                 selected_save_slot = None
                                 level_data = None
+                                boss_defeated_and_portal_used = False  # <--- Reset flag on new game
+                                current_level_number = 1  # Reset level cycle
                                 debug_state()
                                 break
                             elif text == "Збереження":
@@ -1077,7 +1132,14 @@ while running:
             ]
             
             camera = Camera(level_data['width'] * TILE_SIZE, level_data['height'] * TILE_SIZE)
-            background_grid = generate_background_grid(textures, level_data, level_path.name)
+
+            # --- Patch: Use cave floor for cave levels ---
+            level_name = level_path.name
+            if level_name.startswith("level") and level_name != "level0.lvl":
+                # For cave levels, force cave floor
+                background_grid = generate_background_grid(textures, level_data, "cave")
+            else:
+                background_grid = generate_background_grid(textures, level_data, level_name)
 
             # Функція для визначення текстури блоку залежно від оточення
             def determine_block_texture(x, y, blocks_set):
@@ -1168,7 +1230,10 @@ while running:
         if player is not None:
             draw_player_gems(player, screen)
 
-        # --- ШКАЛА ЗДОРОВ'Я ДЛЯ ВРАГІВ ---
+        # --- Малюємо спливаючі повідомлення про шкоду ---
+        update_and_draw_damage_popups(screen, camera)
+
+        # --- ENEMY DAMAGE TO PLAYER ---
         for enemy in enemies:
             # Получаем позицию врага на экране
             enemy_screen_rect = camera.apply_rect(enemy.rect)
@@ -1221,6 +1286,7 @@ while running:
         if current_health <= 0:
             showing_game_over = True
             showing_level = False
+            cursor.draw(screen)
             pygame.display.flip()
             continue
 
@@ -1254,7 +1320,70 @@ while running:
         # --- Обробка подій рівня ---
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                    running = False
+
+                running = False
+            elif event.type == pygame.VIDEORESIZE:
+                SCREEN_WIDTH, SCREEN_HEIGHT = event.size
+                screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.RESIZABLE)
+                update_scaled_images()
+                # Update fonts
+                font = pygame.font.Font("assets/fonts/Hitch-hike.otf", int(SCREEN_HEIGHT * 0.1))
+                title_font = pygame.font.Font("assets/fonts/Hitch-hike.otf", int(SCREEN_HEIGHT * 0.145)) 
+                menu_font = pygame.font.Font("assets/fonts/Hitch-hike.otf", int(SCREEN_HEIGHT * 0.047))
+                settings_font = pygame.font.Font("assets/fonts/Hitch-hike.otf", int(SCREEN_HEIGHT * 0.075))
+                # Update main menu background
+                mainmenu_bg = pygame.image.load(str(INTERFACE_DIR / "mainmenu.png")).convert_alpha()
+                mainmenu_bg = pygame.transform.smoothscale(mainmenu_bg, (SCREEN_WIDTH, SCREEN_HEIGHT))
+                # Update menu/button positions
+                MENU_X = int(SCREEN_WIDTH * 0.07)
+                menu_positions = [
+                    (MENU_X, int(SCREEN_HEIGHT * 0.4)),
+                    (MENU_X, int(SCREEN_HEIGHT * 0.52)),
+                    (MENU_X, int(SCREEN_HEIGHT * 0.64)),
+                    (MENU_X, int(SCREEN_HEIGHT * 0.76))
+                ]
+                pause_menu_rect = pause_menu_image.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2))
+                settings_menu_rect = settings_menu_image.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2))
+                button_positions = {
+                    "continue": (int(SCREEN_WIDTH * 0.39), int(SCREEN_HEIGHT * 0.4)),
+                    "saves": (int(SCREEN_WIDTH * 0.39), int(SCREEN_HEIGHT * 0.55)),
+                    "exit": (int(SCREEN_WIDTH * 0.39), int(SCREEN_HEIGHT * 0.7)),
+                }
+                settings_button_positions = {
+                    "back": (int(SCREEN_WIDTH * 0.05), int(SCREEN_HEIGHT * 0.80)),
+                    "default": (int(SCREEN_WIDTH * 0.28), int(SCREEN_HEIGHT * 0.80)),
+                    "save_back": (int(SCREEN_WIDTH * 0.51), int(SCREEN_HEIGHT * 0.80)),
+                    "save": (int(SCREEN_WIDTH * 0.74), int(SCREEN_HEIGHT * 0.80)),
+                }
+                # Do NOT break or continue here, let the frame finish!
+            # --- Додано: обробка подій меню паузи ---
+            if is_paused and not showing_stats and not showing_settings:
+                if event.type == pygame.MOUSEBUTTONDOWN:
+                    mouse_pos = event.pos
+                    for button_name, button_pos in button_positions.items():
+                        button_rect = pause_menu_buttons.get_rect(topleft=button_pos)
+                        if button_rect.collidepoint(mouse_pos):
+                            print(f"Кнопка '{button_name}' натиснута.")
+                            if button_name == "continue":
+                                is_paused = False
+                            elif button_name == "saves":
+                                print("Відкриття меню збережень...")
+                                # --- Исправлено: открываем меню сохранений ---
+                                showing_saves = True
+                                is_paused = False
+                                selected_save_slot = None
+                                # Не переключаем showing_level, остаёмся в игре
+                                break
+                            elif button_name == "exit":
+                                showing_level = False
+                                showing_menu = True
+                                is_paused = False
+                    break  # <-- заменено continue на break
+                # ВАЖЛИВО: обробка ESC має бути тут, а не в окремому elif нижче!
+                if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                    is_paused = False
+                    break  # <-- заменено continue на break
+
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
                     if showing_stats:
@@ -1407,8 +1536,35 @@ while running:
                     item_screen_rect = camera.apply_rect(item.rect)
                     # Отримуємо поточний час
                     current_time = pygame.time.get_ticks()
-                    # Обробка кліку (тільки коли ще не натиснуто)
+                    # --- Нове: Проверяем дистанцию и отсутствие стены между игроком и сундуком ---
+                    # Проверяем, что курсор на сундуке
                     if item_screen_rect.collidepoint(mouse_pos) and getattr(item, "current_frame", 0) == 0:
+                        # Проверяем дистанцию между игроком и сундуком (по центрам)
+                        player_center = player.rect.center
+                        item_center = item.rect.center
+                        dx = player_center[0] - item_center[0]
+                        dy = player_center[1] - item_center[1]
+                        distance = (dx ** 2 + dy ** 2) ** 0.5
+                        max_distance = 120  # Можно настроить
+                        if distance > max_distance:
+                            print("[DEBUG] Сундук слишком далеко для открытия.")
+                            continue
+                        # Проверяем прямую видимость (нет стены между игроком и сундуком)
+                        def has_line_of_sight(start, end, blocks):
+                            # Брезенхем по прямой между start и end, проверяем пересечение с solid блоками
+                            steps = int(max(abs(end[0] - start[0]), abs(end[1] - start[1])) // 10) + 1
+                            for i in range(1, steps):
+                                x = int(start[0] + (end[0] - start[0]) * i / steps)
+                                y = int(start[1] + (end[1] - start[1]) * i / steps)
+                                point_rect = pygame.Rect(x, y, 4, 4)
+                                for block in blocks:
+                                    if block.is_solid and block.rect.colliderect(point_rect):
+                                        return False
+                            return True
+                        if not has_line_of_sight(player_center, item_center, blocks):
+                            print("[DEBUG] Между игроком и сундуком есть стена!")
+                            continue
+                        # --- Якщо все умови виконані, відкриваємо сундук ---
                         item.current_frame = 1
                         item.clicked_time = pygame.time.get_ticks()
         if is_paused:
@@ -1616,24 +1772,29 @@ while running:
                             enemy.attack_cooldown = 0
                         if enemy.attack_cooldown <= 0:
                             damage = getattr(enemy, "damage", 5)  # По умолчанию 5 урона
-                            # Можно добавить защиту игрока
                             effective_damage = max(1, int(damage * (1 - getattr(player, "protection", 0) / 100)))
                             player.health -= effective_damage
+                            # --- Add damage popup for player ---
+                            add_damage_popup(player.rect.centerx, player.rect.top, f"-{effective_damage}", (255, 0, 0))
                             enemy.attack_cooldown = 30  # 30 кадров задержка между ударами (~0.5 сек при 60 FPS)
                         else:
                             enemy.attack_cooldown -= 1
-                enemy.dx = 0
+                        enemy.dx = 0
                 enemy.dy = 0
 
             # --- УДАРИ ПО ІГРОКАМ (по кнопці пробел) ---
             if pygame.key.get_pressed()[pygame.K_SPACE]:
+                enemies_to_remove = []
                 for enemy in enemies:
                     if player.rect.colliderect(enemy.rect):
                         if not hasattr(enemy, "hit_cooldown"):
                             enemy.hit_cooldown = 0
                         if enemy.hit_cooldown <= 0:
                             player_damage = getattr(player, "atk", 10)
-                            enemy.health = getattr(enemy, "health", 10) - player_damage
+                            prev_health = getattr(enemy, "health", 10)
+                            enemy.health = prev_health - player_damage
+                            # --- Add damage popup for enemy ---
+                            add_damage_popup(enemy.rect.centerx, enemy.rect.top, f"-{player_damage}", (255, 255, 0))
                             if enemy.health <= 0:
                                 # --- Якщо убит босс, появляется телепорт ---
                                 if hasattr(enemy, "type") and "boss" in enemy.type:
@@ -1646,11 +1807,16 @@ while running:
                                             'teleport': textures['teleport']
                                         }
                                     ))
-                                enemies.remove(enemy)
+                                    boss_defeated_and_portal_used = False
+                                enemies_to_remove.append(enemy)
                             else:
                                 enemy.hit_cooldown = 15
                         else:
                             enemy.hit_cooldown -= 1
+                # Remove dead enemies after the loop
+                for enemy in enemies_to_remove:
+                    if enemy in enemies:
+                        enemies.remove(enemy)
         
             keys = {pygame.K_w, pygame.K_a, pygame.K_s, pygame.K_d}
             pressed = pygame.key.get_pressed()
@@ -1661,6 +1827,7 @@ while running:
                 player.dy = 0
             player.update(blocks, items, statues)
             camera.update(player)
+
 
         # Перевірка колізій з ворогами
         for enemy in enemies:
@@ -1693,18 +1860,36 @@ while running:
                             print("Вибір рівня скасовано.")
                         break
                     else:
-                        print("Завантаження рівня level1...")
-                        # --- Зберігаємо стан гемів і статуй перед переходом ---
-                        save_player_gems_state(player)
-                        save_statues_state(statues)
-                        level_transitioning = True
-                        level_path = LEVELS_DIR / "level1.lvl"
-                        player = None
-                        camera = None
-                        background_grid = None
-                        statues = None  # залишаємо для явного скидання
-                        # Після цього цикл ініціалізує новий рівень автоматично
-                        level_transitioning = False
+                        # --- Цикл по уровням: после портала грузим следующий номер ---
+                        if boss_defeated_and_portal_used:
+                            # Try to load next level by number
+                            next_level_path = LEVELS_DIR / f"level{current_level_number}.lvl"
+                            # If file doesn't exist, cycle to level1.lvl
+                            if not next_level_path.exists():
+                                current_level_number = 1
+                                next_level_path = LEVELS_DIR / f"level{current_level_number}.lvl"
+                            print(f"Завантаження рівня {next_level_path.name} (цикл по рівнях)...")
+                            save_player_gems_state(player)
+                            save_statues_state(statues)
+                            level_transitioning = True
+                            level_path = next_level_path
+                            player = None
+                            camera = None
+                            background_grid = None
+                            statues = None
+                            boss_defeated_and_portal_used = False  # Reset flag after entering
+                            level_transitioning = False
+                        else:
+                            print("Завантаження рівня level1...")
+                            save_player_gems_state(player)
+                            save_statues_state(statues)
+                            level_transitioning = True
+                            level_path = LEVELS_DIR / "level1.lvl"
+                            player = None
+                            camera = None
+                            background_grid = None
+                            statues = None
+                            level_transitioning = False
                         break
                 elif npc.type == 'teleport' and not level_transitioning:
                     print("Телепортація на рівень level0...")
@@ -1716,9 +1901,10 @@ while running:
                     player = None
                     camera = None
                     background_grid = None
-                    statues = None  # залишаємо для явного скидання
-                    # Після цього цикл ініціалізує новий рівень автоматично
+                    statues = None
                     level_transitioning = False
+                    boss_defeated_and_portal_used = True
+                    current_level_number += 1  # <--- INCREMENT LEVEL NUMBER for next cave entry
                     break
 
         # --- Рендер меню налаштувань після обробки подій ---
@@ -1751,7 +1937,7 @@ while running:
                     #if (slider_x <= mouse_pos[0] <= slider_x + slider_width and
                     #  slider_y - 10 <= mouse_pos[1] <= slider_y + slider_height + 10):
                     ### DEBUG ###
-                    print(f"MOUSE ={event.type},{getattr(event, "buttons", (0,))[0]},")
+                    print(f"MOUSE ={event.type},{getattr(event, 'buttons', (0,))[0]},")
                     new_volume = (mouse_pos[0] - slider_x) / slider_width
                     new_volume = max(0, min(1, new_volume))
                     current_volume = new_volume
@@ -1790,6 +1976,7 @@ while running:
                     windowed_rect = pygame.Rect(int(SCREEN_WIDTH * 0.42), int(SCREEN_HEIGHT * 0.45) + int(SCREEN_HEIGHT * 0.09), 30, 30)
                     if windowed_rect.collidepoint(mouse_pos):
                         settings["fullscreen"] = not settings.get("fullscreen", False)
+                        # --- Переход в оконный режим при снятии флажка ---
                         if settings["fullscreen"]:
                             screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.FULLSCREEN)
                         else:
@@ -1813,6 +2000,186 @@ while running:
                 elif event.type == pygame.KEYUP:
                     if event.key in pressed_keys:
                         pressed_keys.discard(event.key)
+
+                        cursor.draw(screen)
+                        pygame.display.flip()
+            continue
+
+        if showing_saves:
+            slot_rects, save_rect, load_rect, back_rect = render_saves_menu(screen, menu_font, pause_menu_image, pause_menu_buttons, SAVE_SLOTS, selected_save_slot)
+            cursor.draw(screen)
+            pygame.display.flip()
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    running = False
+                elif event.type == pygame.MOUSEBUTTONDOWN:
+                    mouse_pos = event.pos
+                    for slot, rect in slot_rects:
+                        if rect.collidepoint(mouse_pos):
+                            selected_save_slot = slot
+                            break
+                    if back_rect and back_rect.collidepoint(mouse_pos):
+                        showing_saves = False
+                        is_paused = True
+                        selected_save_slot = None
+                        break
+                elif event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_ESCAPE:
+                        selected_save_slot = None
+                        showing_saves = False
+                        is_paused = True
+            continue
+        if is_paused and not showing_stats and not showing_settings:
+            render_pause_menu(screen, pause_menu_image, pause_menu_buttons, button_positions, title_font, font, menu_font)
+            cursor.draw(screen)
+            pygame.display.flip()
+            continue  # Просто малюємо меню паузи і переходимо до наступного кадру
+        cursor.draw(screen)
+        pygame.display.flip()
+    elif showing_settings:
+        # --- Додаємо напівпрозорий фон для меню налаштувань з головного меню ---
+        overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+        screen.blit(mainmenu_bg, (0, 0))  # Малюємо фон головного меню
+        screen.blit(overlay, (0, 0))     # Малюємо напівпрозорий шар
+        if 'rotating_image' not in globals() or 'rotating_image_rect' not in globals():
+            update_scaled_images()
+        try:
+            rotation_angle = (rotation_angle + 1) % 360  # Збільшуємо кут обертання
+        except NameError:
+            rotation_angle = 0
+        rotated_image = pygame.transform.rotate(rotating_image, rotation_angle)
+        rotated_rect = rotated_image.get_rect(center=rotating_image_rect.center)
+        screen.blit(rotated_image, rotated_rect.topleft)
+        render_settings_menu(screen, settings_menu_image, settings_menu_buttons, settings_button_positions, title_font, settings_font, menu_font)
+        slider_x = int(SCREEN_WIDTH * 0.26)
+        slider_y = int(SCREEN_HEIGHT * 0.36)
+        slider_width = int(SCREEN_WIDTH * 0.22)
+        slider_height = 10
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+            # --- Добавлено: обработка ресайза окна в меню настроек ---
+            elif event.type == pygame.VIDEORESIZE:
+                SCREEN_WIDTH, SCREEN_HEIGHT = event.w, event.h
+                screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.RESIZABLE)
+                update_scaled_images()
+                pause_menu_rect = pause_menu_image.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2))
+                settings_menu_rect = settings_menu_image.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2))
+                button_positions = {
+                    "continue": (int(SCREEN_WIDTH * 0.39), int(SCREEN_HEIGHT * 0.4)),
+                    "saves": (int(SCREEN_WIDTH * 0.39), int(SCREEN_HEIGHT * 0.55)),
+                    "exit": (int(SCREEN_WIDTH * 0.39), int(SCREEN_HEIGHT * 0.7)),
+                }
+                settings_button_positions = {
+                    "back": (int(SCREEN_WIDTH * 0.05), int(SCREEN_HEIGHT * 0.80)),
+                    "default": (int(SCREEN_WIDTH * 0.28), int(SCREEN_HEIGHT * 0.80)),
+                    "save_back": (int(SCREEN_WIDTH * 0.51), int(SCREEN_HEIGHT * 0.80)),
+                    "save": (int(SCREEN_WIDTH * 0.74), int(SCREEN_HEIGHT * 0.80)),
+                }
+                continue
+            elif ( event.type == pygame.MOUSEBUTTONDOWN 
+                or ( event.type == pygame.MOUSEMOTION and getattr(event, "buttons", (0,))[0] ) 
+              ) and slider_x <= event.pos[0] <= slider_x + slider_width and slider_y - 10 <= event.pos[1] <= slider_y + slider_height + 10:
+                mouse_pos = event.pos
+                # --- Повзунок гучності ---
+                print(f"MOUSE ={event.type},{getattr(event, 'buttons', (0,))[0]},")
+                new_volume = (mouse_pos[0] - slider_x) / slider_width
+                new_volume = max(0, min(1, new_volume))
+                current_volume = new_volume
+                pygame.mixer.music.set_volume(current_volume)
+                settings["volume"] = int(current_volume * 100)
+            elif event.type == pygame.MOUSEBUTTONDOWN: 
+                mouse_pos = event.pos
+                # --- Кнопки меню налаштувань ---
+                for button_name, button_pos in settings_button_positions.items():
+                    button_rect = settings_menu_buttons.get_rect(topleft=button_pos)
+                    if button_rect.collidepoint(mouse_pos):
+                        print(f"Кнопка '{button_name}' натиснута в меню налаштувань.")
+                        if button_name == "back":
+                            loaded_settings = load_settings_from_file()
+                            if loaded_settings:
+                                settings.clear()
+                                settings.update(loaded_settings)
+                                current_volume = settings.get("volume", 100) / 100
+                                pygame.mixer.music.set_volume(current_volume)
+                            showing_settings = False
+                            showing_menu = True
+                        elif button_name == "default":
+                            set_default_settings()
+                        elif button_name == "save_back":
+                            settings["volume"] = int(current_volume * 100)
+                            save_settings_to_file(settings)
+                            showing_settings = False
+                            showing_menu = True
+                        elif button_name == "save":
+                            settings["volume"] = int(current_volume * 100)
+                            save_settings_to_file(settings)
+                                    # --- Чекбокси ---
+                    hints_rect = pygame.Rect(int(SCREEN_WIDTH * 0.42), int(SCREEN_HEIGHT * 0.45), 30, 30)
+                    if hints_rect.collidepoint(mouse_pos):
+                        settings["hints"] = not settings.get("hints", True)
+                    windowed_rect = pygame.Rect(int(SCREEN_WIDTH * 0.42), int(SCREEN_HEIGHT * 0.45) + int(SCREEN_HEIGHT * 0.09), 30, 30)
+                    if windowed_rect.collidepoint(mouse_pos):
+                        settings["fullscreen"] = not settings.get("fullscreen", False)
+                        # --- Переход в оконный режим при снятии флажка ---
+                        if settings["fullscreen"]:
+                            screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.FULLSCREEN)
+                        else:
+                            screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.RESIZABLE)
+                    level_select_rect = pygame.Rect(int(SCREEN_WIDTH * 0.42), int(SCREEN_HEIGHT * 0.45) + 2 * int(SCREEN_HEIGHT * 0.09), 30, 30)
+                    if level_select_rect.collidepoint(mouse_pos):
+                        settings["level_select"] = not settings.get("level_select", False)
+
+                    elif event.type == pygame.MOUSEMOTION and getattr(event, "buttons", (0,))[0]:
+                    # --- Повзунок гучності drag ---
+                        mouse_pos = event.pos
+                    if (slider_x <= mouse_pos[0] <= slider_x + slider_width and
+                        slider_y - 10 <= mouse_pos[1] <= slider_y + slider_height + 10):
+                        new_volume = (mouse_pos[0] - slider_x) / slider_width
+                        new_volume = max(0, min(1, new_volume))
+                        current_volume = new_volume
+                        pygame.mixer.music.set_volume(current_volume)
+                        settings["volume"] = int(current_volume * 100)
+                    elif event.type == pygame.KEYDOWN:
+                        if event.key == pygame.K_ESCAPE:
+                            showing_settings = False
+                    elif event.type == pygame.KEYUP:
+                        if event.key in pressed_keys:
+                            pressed_keys.discard(event.key)
+                        cursor.draw(screen)
+                        pygame.display.flip()
+            continue
+
+        if showing_saves:
+            slot_rects, save_rect, load_rect, back_rect = render_saves_menu(screen, menu_font, pause_menu_image, pause_menu_buttons, SAVE_SLOTS, selected_save_slot)
+            pygame.display.flip()
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    running = False
+                elif event.type == pygame.MOUSEBUTTONDOWN:
+                    mouse_pos = event.pos
+                    for slot, rect in slot_rects:
+                        if rect.collidepoint(mouse_pos):
+                            selected_save_slot = slot
+                            break
+                    if back_rect and back_rect.collidepoint(mouse_pos):
+                        showing_saves = False
+                        is_paused = True
+                        selected_save_slot = None
+                        break
+                elif event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_ESCAPE:
+                        selected_save_slot = None
+                        showing_saves = False
+                        is_paused = True
+            continue
+        if is_paused and not showing_stats and not showing_settings:
+            render_pause_menu(screen, pause_menu_image, pause_menu_buttons, button_positions, title_font, font, menu_font)
+            cursor.draw(screen)
+            pygame.display.flip()
+            continue  # Просто малюємо меню паузи і переходимо до наступного кадру
+        cursor.draw(screen)
+
         pygame.display.flip()
         continue
     elif showing_saves:
@@ -1833,6 +2200,37 @@ while running:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
+
+            # --- Добавлено: обработка ресайза окна в меню настроек ---
+            elif event.type == pygame.VIDEORESIZE:
+                SCREEN_WIDTH, SCREEN_HEIGHT = event.w, event.h
+                screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.RESIZABLE)
+                update_scaled_images()
+                pause_menu_rect = pause_menu_image.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2))
+                settings_menu_rect = settings_menu_image.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2))
+                button_positions = {
+                    "continue": (int(SCREEN_WIDTH * 0.39), int(SCREEN_HEIGHT * 0.4)),
+                    "saves": (int(SCREEN_WIDTH * 0.39), int(SCREEN_HEIGHT * 0.55)),
+                    "exit": (int(SCREEN_WIDTH * 0.39), int(SCREEN_HEIGHT * 0.7)),
+                }
+                settings_button_positions = {
+                    "back": (int(SCREEN_WIDTH * 0.05), int(SCREEN_HEIGHT * 0.80)),
+                    "default": (int(SCREEN_WIDTH * 0.28), int(SCREEN_HEIGHT * 0.80)),
+                    "save_back": (int(SCREEN_WIDTH * 0.51), int(SCREEN_HEIGHT * 0.80)),
+                    "save": (int(SCREEN_WIDTH * 0.74), int(SCREEN_HEIGHT * 0.80)),
+                }
+                continue
+            elif ( event.type == pygame.MOUSEBUTTONDOWN 
+                or ( event.type == pygame.MOUSEMOTION and getattr(event, "buttons", (0,))[0] ) 
+              ) and slider_x <= event.pos[0] <= slider_x + slider_width and slider_y - 10 <= event.pos[1] <= slider_y + slider_height + 10:
+                mouse_pos = event.pos
+                # --- Повзунок гучності ---
+                print(f"MOUSE ={event.type},{getattr(event, 'buttons', (0,))[0]},")
+                new_volume = (mouse_pos[0] - slider_x) / slider_width
+                new_volume = max(0, min(1, new_volume))
+                current_volume = new_volume
+                pygame.mixer.music.set_volume(current_volume)
+                settings["volume"] = int(current_volume * 100)
             elif event.type == pygame.MOUSEBUTTONDOWN:
                 mouse_pos = event.pos
                 for slot, rect in slot_rects:
@@ -1847,6 +2245,7 @@ while running:
                         showing_menu = True
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
+
                     selected_save_slot = None
                     showing_saves = False
                     if not showing_level:
@@ -1909,8 +2308,8 @@ while running:
                     statues_state = {}
                     break
         continue
+        cursor.draw(screen)
     pygame.display.flip()
-
 pygame.quit()
 print("Програма завершена")  # Додано: журнал для перевірки завершення програми
 sys.exit()

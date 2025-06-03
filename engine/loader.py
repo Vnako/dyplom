@@ -27,6 +27,14 @@ START_LOC_DIR = ASSETS_DIR / "img" / "start_loc"
 STATUE_DIR = ENTITIES_DIR / "statue"
 ITEMS_DIR = ASSETS_DIR / "img" / "pick_items"
 
+# Курсор
+def load_image(path):
+    return pygame.image.load(path).convert_alpha()
+
+def load_cursor():
+    return load_image("assets/img/interface/cursor.png")
+
+
 # Завантаження текстур
 def load_textures():
     """
@@ -300,12 +308,11 @@ def generate_background_grid(textures, level_data, level_name):
     :return: Сітка текстур
     """
     grid = []
-    for y in range(0, level_data['height'] * TILE_SIZE, TILE_SIZE):  # Використання висоти рівня
+    for y in range(0, level_data['height'] * TILE_SIZE, TILE_SIZE):
         row = []
-        for x in range(0, level_data['width'] * TILE_SIZE, TILE_SIZE):  # Використання ширини рівня
-            if level_name == "level1.lvl":
-                row.append(textures['dangeon_floor'])  # Використовуємо текстуру 'dangeon_floor' для level1
-            else:
+        for x in range(0, level_data['width'] * TILE_SIZE, TILE_SIZE):
+            if level_name == "level0.lvl":
+                # Для стартовой локации трава
                 random_grass = random.choice([
                     textures['grass1'],
                     textures['grass2'],
@@ -314,8 +321,11 @@ def generate_background_grid(textures, level_data, level_name):
                     textures['grass5'],
                     textures['grass6'],
                     textures['grass7']
-                ])  # Випадкова текстура трави для інших рівнів
+                ])
                 row.append(random_grass)
+            else:
+                # Для всех остальных — каменный пол
+                row.append(textures['dangeon_floor'])
         grid.append(row)
     return grid
 
