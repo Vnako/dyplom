@@ -4,10 +4,10 @@ import json
 import os
 from pathlib import Path
 from engine.loader import (
-    load_textures, generate_background_grid, determine_tree_texture, render_background, enemy_type_mapping, npc_type_mapping, statue_type_mapping, load_grass_textures, draw_player_gems
+    load_cursor, load_textures, generate_background_grid, determine_tree_texture, render_background, enemy_type_mapping, npc_type_mapping, statue_type_mapping, load_grass_textures, draw_player_gems
 )
 from engine.parser import parse_level_file
-from engine.entities import Player, Block, Enemy, Item, Npc, Camera, IntStat
+from engine.entities import Player, Block, Enemy, Item, Npc, Camera, IntStat, Cursor
 import tkinter as tk
 from tkinter import filedialog
 import random
@@ -28,6 +28,13 @@ TILE_SIZE = 100
 screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.RESIZABLE)
 pygame.display.set_caption("Slime Quest: Dungeon")
 clock = pygame.time.Clock()
+
+# Загружаем курсор
+cursor_img = load_cursor()
+cursor = Cursor(cursor_img)
+
+# Прячем системный курсор
+pygame.mouse.set_visible(False)
 
 # Шляхи до ресурсів
 BASE_DIR = Path(__file__).resolve().parent
@@ -386,6 +393,7 @@ def set_default_settings():
     pygame.mixer.music.set_volume(globals()["current_volume"])
     # Примусове перемальовування меню налаштувань
     render_settings_menu(screen, settings_menu_image, settings_menu_buttons, settings_button_positions, title_font, settings_font, menu_font)
+    cursor.draw(screen)
     pygame.display.flip()
     
 def create_player(player_start, textures):
@@ -881,6 +889,8 @@ while running:
     if showing_game_over:
         screen.blit(mainmenu_bg, (0, 0))
         button_rect = render_game_over(screen, title_font, menu_font)
+        # --- draw cursor before flip ---
+        cursor.draw(screen)
         pygame.display.flip()
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -943,6 +953,8 @@ while running:
     # --- Handle saves menu globally ---
     if showing_saves:
         slot_rects, save_rect, load_rect, back_rect = render_saves_menu(screen, menu_font, pause_menu_image, pause_menu_buttons, SAVE_SLOTS, selected_save_slot)
+        # --- draw cursor before flip ---
+        cursor.draw(screen)
         pygame.display.flip()
         load_requested = False
         load_slot = None
@@ -963,6 +975,7 @@ while running:
                         slot_rects, save_rect, load_rect, back_rect = render_saves_menu(
                             screen, menu_font, pause_menu_image, pause_menu_buttons, SAVE_SLOTS, selected_save_slot
                         )
+                        cursor.draw(screen)
                         pygame.display.flip()
                     else:
                         print("Нельзя сохранить: игра не запущена!")
@@ -1052,6 +1065,8 @@ while running:
                 screen.blit(arrow_image, arrow_pos)
                 arrow_drawn = True  # Встановлюємо флаг, щоб стрілка відображалася лише один раз
 
+        # --- draw cursor before flip ---
+        cursor.draw(screen)
         pygame.display.flip()
 
         # Обробка подій
@@ -1399,6 +1414,7 @@ while running:
         if current_health <= 0:
             showing_game_over = True
             showing_level = False
+            cursor.draw(screen)
             pygame.display.flip()
             continue
 
@@ -1963,11 +1979,13 @@ while running:
                 elif event.type == pygame.KEYUP:
                     if event.key in pressed_keys:
                         pressed_keys.discard(event.key)
+                        cursor.draw(screen)
                         pygame.display.flip()
             continue
 
         if showing_saves:
             slot_rects, save_rect, load_rect, back_rect = render_saves_menu(screen, menu_font, pause_menu_image, pause_menu_buttons, SAVE_SLOTS, selected_save_slot)
+            cursor.draw(screen)
             pygame.display.flip()
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
@@ -1991,8 +2009,10 @@ while running:
             continue
         if is_paused and not showing_stats and not showing_settings:
             render_pause_menu(screen, pause_menu_image, pause_menu_buttons, button_positions, title_font, font, menu_font)
+            cursor.draw(screen)
             pygame.display.flip()
             continue  # Просто малюємо меню паузи і переходимо до наступного кадру
+        cursor.draw(screen)
         pygame.display.flip()
     elif showing_settings:
         # --- Додаємо напівпрозорий фон для меню налаштувань з головного меню ---
@@ -2104,6 +2124,7 @@ while running:
                     elif event.type == pygame.KEYUP:
                         if event.key in pressed_keys:
                             pressed_keys.discard(event.key)
+                        cursor.draw(screen)
                         pygame.display.flip()
             continue
 
@@ -2132,8 +2153,10 @@ while running:
             continue
         if is_paused and not showing_stats and not showing_settings:
             render_pause_menu(screen, pause_menu_image, pause_menu_buttons, button_positions, title_font, font, menu_font)
+            cursor.draw(screen)
             pygame.display.flip()
             continue  # Просто малюємо меню паузи і переходимо до наступного кадру
+        cursor.draw(screen)
         pygame.display.flip()
     elif showing_settings:
         # --- Додаємо напівпрозорий фон для меню налаштувань з головного меню ---
@@ -2234,8 +2257,8 @@ while running:
             elif event.type == pygame.KEYUP:
                 if event.key in pressed_keys:
                     pressed_keys.discard(event.key)
+        cursor.draw(screen)
         pygame.display.flip()
-
 pygame.quit()
 print("Програма завершена")  # Додано: журнал для перевірки завершення програми
 sys.exit()

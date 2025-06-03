@@ -158,7 +158,13 @@ class Player:
         if self.health <= 0:
                 print("Гравець помер")
                 self.health = 0
+class Cursor:
+    def __init__(self, image):
+        self.image = image
 
+    def draw(self, surface):
+        pos = pygame.mouse.get_pos()
+        surface.blit(self.image, pos)
 class Camera:
     """
     Клас для управління камерою, яка слідує за гравцем.

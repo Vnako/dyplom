@@ -27,6 +27,14 @@ START_LOC_DIR = ASSETS_DIR / "img" / "start_loc"
 STATUE_DIR = ENTITIES_DIR / "statue"
 ITEMS_DIR = ASSETS_DIR / "img" / "pick_items"
 
+# Курсор
+def load_image(path):
+    return pygame.image.load(path).convert_alpha()
+
+def load_cursor():
+    return load_image("assets/img/interface/cursor.png")
+
+
 # Завантаження текстур
 def load_textures():
     """
