@@ -14,7 +14,8 @@ from engine.parser import parse_level_file
 pygame.init()
 
 # Константи
-SCREEN_WIDTH, SCREEN_HEIGHT = 1920, 1080
+display_info = pygame.display.Info()
+SCREEN_WIDTH, SCREEN_HEIGHT = display_info.current_w, display_info.current_h
 TILE_SIZE = 100
 
 # Базовий шлях до ресурсів
