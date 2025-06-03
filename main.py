@@ -1683,8 +1683,35 @@ while running:
                     item_screen_rect = camera.apply_rect(item.rect)
                     # Отримуємо поточний час
                     current_time = pygame.time.get_ticks()
-                    # Обробка кліку (тільки коли ще не натиснуто)
+                    # --- Нове: Проверяем дистанцию и отсутствие стены между игроком и сундуком ---
+                    # Проверяем, что курсор на сундуке
                     if item_screen_rect.collidepoint(mouse_pos) and getattr(item, "current_frame", 0) == 0:
+                        # Проверяем дистанцию между игроком и сундуком (по центрам)
+                        player_center = player.rect.center
+                        item_center = item.rect.center
+                        dx = player_center[0] - item_center[0]
+                        dy = player_center[1] - item_center[1]
+                        distance = (dx ** 2 + dy ** 2) ** 0.5
+                        max_distance = 120  # Можно настроить
+                        if distance > max_distance:
+                            print("[DEBUG] Сундук слишком далеко для открытия.")
+                            continue
+                        # Проверяем прямую видимость (нет стены между игроком и сундуком)
+                        def has_line_of_sight(start, end, blocks):
+                            # Брезенхем по прямой между start и end, проверяем пересечение с solid блоками
+                            steps = int(max(abs(end[0] - start[0]), abs(end[1] - start[1])) // 10) + 1
+                            for i in range(1, steps):
+                                x = int(start[0] + (end[0] - start[0]) * i / steps)
+                                y = int(start[1] + (end[1] - start[1]) * i / steps)
+                                point_rect = pygame.Rect(x, y, 4, 4)
+                                for block in blocks:
+                                    if block.is_solid and block.rect.colliderect(point_rect):
+                                        return False
+                            return True
+                        if not has_line_of_sight(player_center, item_center, blocks):
+                            print("[DEBUG] Между игроком и сундуком есть стена!")
+                            continue
+                        # --- Якщо все умови виконані, відкриваємо сундук ---
                         item.current_frame = 1
                         item.clicked_time = pygame.time.get_ticks()
             
@@ -1770,7 +1797,7 @@ while running:
                             enemy.attack_cooldown = 30  # 30 кадров задержка между ударами (~0.5 сек при 60 FPS)
                         else:
                             enemy.attack_cooldown -= 1
-                enemy.dx = 0
+                        enemy.dx = 0
                 enemy.dy = 0
 
             # --- УДАРИ ПО ІГРОКАМ (по кнопці пробел) ---
@@ -1817,6 +1844,7 @@ while running:
                 player.dy = 0
             player.update(blocks, items, statues)
             camera.update(player)
+
 
         # Перевірка колізій з ворогами
         for enemy in enemies:
