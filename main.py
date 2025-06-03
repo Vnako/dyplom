@@ -830,6 +830,12 @@ current_music = None
 selected_save_slot = None
 level_transitioning = False
 
+# --- Додаємо змінну для відстеження переходу на новий рівень після босса ---
+boss_defeated_and_portal_used = False
+
+# --- Track current level number for cycling ---
+current_level_number = 1  # Start from level1.lvl after cave
+
 while running:
     clock.tick(60)
     global rotating_image, rotating_image_rect, rotation_angle
@@ -866,6 +872,8 @@ while running:
                     level_data = None
                     player_gems_state = {}
                     statues_state = {}
+                    boss_defeated_and_portal_used = False
+                    current_level_number = 1  # Reset level cycle
                     break
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_RETURN or event.key == pygame.K_SPACE:
@@ -890,6 +898,8 @@ while running:
                     level_data = None
                     player_gems_state = {}
                     statues_state = {}
+                    boss_defeated_and_portal_used = False
+                    current_level_number = 1  # Reset level cycle
                     break
         continue
 
@@ -1039,6 +1049,8 @@ while running:
                                 showing_saves = False
                                 selected_save_slot = None
                                 level_data = None
+                                boss_defeated_and_portal_used = False  # <--- Reset flag on new game
+                                current_level_number = 1  # Reset level cycle
                                 debug_state()
                                 break
                             elif text == "Збереження":
@@ -1193,7 +1205,14 @@ while running:
             ]
             
             camera = Camera(level_data['width'] * TILE_SIZE, level_data['height'] * TILE_SIZE)
-            background_grid = generate_background_grid(textures, level_data, level_path.name)
+
+            # --- Patch: Use cave floor for cave levels ---
+            level_name = level_path.name
+            if level_name.startswith("level") and level_name != "level0.lvl":
+                # For cave levels, force cave floor
+                background_grid = generate_background_grid(textures, level_data, "cave")
+            else:
+                background_grid = generate_background_grid(textures, level_data, level_name)
 
             # 8. Функція determine_block_texture(x, y, blocks_set)
             # Визначення текстури блоку за оточенням — дублюється у кількох місцях.
@@ -1373,8 +1392,42 @@ while running:
         # --- Обробка подій рівня ---
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                    running = False
-            # --- Обробка подій меню паузи ---
+                running = False
+            elif event.type == pygame.VIDEORESIZE:
+                SCREEN_WIDTH, SCREEN_HEIGHT = event.size
+                screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.RESIZABLE)
+                update_scaled_images()
+                # Update fonts
+                font = pygame.font.Font("assets/fonts/Hitch-hike.otf", int(SCREEN_HEIGHT * 0.1))
+                title_font = pygame.font.Font("assets/fonts/Hitch-hike.otf", int(SCREEN_HEIGHT * 0.145)) 
+                menu_font = pygame.font.Font("assets/fonts/Hitch-hike.otf", int(SCREEN_HEIGHT * 0.047))
+                settings_font = pygame.font.Font("assets/fonts/Hitch-hike.otf", int(SCREEN_HEIGHT * 0.075))
+                # Update main menu background
+                mainmenu_bg = pygame.image.load(str(INTERFACE_DIR / "mainmenu.png")).convert_alpha()
+                mainmenu_bg = pygame.transform.smoothscale(mainmenu_bg, (SCREEN_WIDTH, SCREEN_HEIGHT))
+                # Update menu/button positions
+                MENU_X = int(SCREEN_WIDTH * 0.07)
+                menu_positions = [
+                    (MENU_X, int(SCREEN_HEIGHT * 0.4)),
+                    (MENU_X, int(SCREEN_HEIGHT * 0.52)),
+                    (MENU_X, int(SCREEN_HEIGHT * 0.64)),
+                    (MENU_X, int(SCREEN_HEIGHT * 0.76))
+                ]
+                pause_menu_rect = pause_menu_image.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2))
+                settings_menu_rect = settings_menu_image.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2))
+                button_positions = {
+                    "continue": (int(SCREEN_WIDTH * 0.39), int(SCREEN_HEIGHT * 0.4)),
+                    "saves": (int(SCREEN_WIDTH * 0.39), int(SCREEN_HEIGHT * 0.55)),
+                    "exit": (int(SCREEN_WIDTH * 0.39), int(SCREEN_HEIGHT * 0.7)),
+                }
+                settings_button_positions = {
+                    "back": (int(SCREEN_WIDTH * 0.05), int(SCREEN_HEIGHT * 0.80)),
+                    "default": (int(SCREEN_WIDTH * 0.28), int(SCREEN_HEIGHT * 0.80)),
+                    "save_back": (int(SCREEN_WIDTH * 0.51), int(SCREEN_HEIGHT * 0.80)),
+                    "save": (int(SCREEN_WIDTH * 0.74), int(SCREEN_HEIGHT * 0.80)),
+                }
+                # Do NOT break or continue here, let the frame finish!
+            # --- Додано: обробка подій меню паузи ---
             if is_paused and not showing_stats and not showing_settings:
                 if event.type == pygame.MOUSEBUTTONDOWN:
                     mouse_pos = event.pos
@@ -1684,6 +1737,7 @@ while running:
                                             'teleport': textures['teleport']
                                         }
                                     ))
+                                    boss_defeated_and_portal_used = False
                                 enemies.remove(enemy)
                             else:
                                 enemy.hit_cooldown = 15
@@ -1730,18 +1784,36 @@ while running:
                             print("Вибір рівня скасовано.")
                         break
                     else:
-                        print("Завантаження рівня level1...")
-                        # --- Зберігаємо стан гемів і статуй перед переходом ---
-                        save_player_gems_state(player)
-                        save_statues_state(statues)
-                        level_transitioning = True
-                        level_path = LEVELS_DIR / "level1.lvl"
-                        player = None
-                        camera = None
-                        background_grid = None
-                        statues = None  # залишаємо для явного скидання
-                        # Після цього цикл ініціалізує новий рівень автоматично
-                        level_transitioning = False
+                        # --- Цикл по уровням: после портала грузим следующий номер ---
+                        if boss_defeated_and_portal_used:
+                            # Try to load next level by number
+                            next_level_path = LEVELS_DIR / f"level{current_level_number}.lvl"
+                            # If file doesn't exist, cycle to level1.lvl
+                            if not next_level_path.exists():
+                                current_level_number = 1
+                                next_level_path = LEVELS_DIR / f"level{current_level_number}.lvl"
+                            print(f"Завантаження рівня {next_level_path.name} (цикл по рівнях)...")
+                            save_player_gems_state(player)
+                            save_statues_state(statues)
+                            level_transitioning = True
+                            level_path = next_level_path
+                            player = None
+                            camera = None
+                            background_grid = None
+                            statues = None
+                            boss_defeated_and_portal_used = False  # Reset flag after entering
+                            level_transitioning = False
+                        else:
+                            print("Завантаження рівня level1...")
+                            save_player_gems_state(player)
+                            save_statues_state(statues)
+                            level_transitioning = True
+                            level_path = LEVELS_DIR / "level1.lvl"
+                            player = None
+                            camera = None
+                            background_grid = None
+                            statues = None
+                            level_transitioning = False
                         break
                 elif npc.type == 'teleport' and not level_transitioning:
                     print("Телепортація на рівень level0...")
@@ -1753,9 +1825,10 @@ while running:
                     player = None
                     camera = None
                     background_grid = None
-                    statues = None  # залишаємо для явного скидання
-                    # Після цього цикл ініціалізує новий рівень автоматично
+                    statues = None
                     level_transitioning = False
+                    boss_defeated_and_portal_used = True
+                    current_level_number += 1  # <--- INCREMENT LEVEL NUMBER for next cave entry
                     break
 
         # --- Рендер меню налаштувань після обробки подій ---
@@ -1778,7 +1851,7 @@ while running:
                     #if (slider_x <= mouse_pos[0] <= slider_x + slider_width and
                     #  slider_y - 10 <= mouse_pos[1] <= slider_y + slider_height + 10):
                     ### DEBUG ###
-                    print(f"MOUSE ={event.type},{getattr(event, "buttons", (0,))[0]},")
+                    print(f"MOUSE ={event.type},{getattr(event, 'buttons', (0,))[0]},")
                     new_volume = (mouse_pos[0] - slider_x) / slider_width
                     new_volume = max(0, min(1, new_volume))
                     current_volume = new_volume
@@ -1816,6 +1889,7 @@ while running:
                     windowed_rect = pygame.Rect(int(SCREEN_WIDTH * 0.42), int(SCREEN_HEIGHT * 0.45) + int(SCREEN_HEIGHT * 0.09), 30, 30)
                     if windowed_rect.collidepoint(mouse_pos):
                         settings["fullscreen"] = not settings.get("fullscreen", False)
+                        # --- Переход в оконный режим при снятии флажка ---
                         if settings["fullscreen"]:
                             screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.FULLSCREEN)
                         else:
@@ -1893,15 +1967,31 @@ while running:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
+            # --- Добавлено: обработка ресайза окна в меню настроек ---
+            elif event.type == pygame.VIDEORESIZE:
+                SCREEN_WIDTH, SCREEN_HEIGHT = event.w, event.h
+                screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.RESIZABLE)
+                update_scaled_images()
+                pause_menu_rect = pause_menu_image.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2))
+                settings_menu_rect = settings_menu_image.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2))
+                button_positions = {
+                    "continue": (int(SCREEN_WIDTH * 0.39), int(SCREEN_HEIGHT * 0.4)),
+                    "saves": (int(SCREEN_WIDTH * 0.39), int(SCREEN_HEIGHT * 0.55)),
+                    "exit": (int(SCREEN_WIDTH * 0.39), int(SCREEN_HEIGHT * 0.7)),
+                }
+                settings_button_positions = {
+                    "back": (int(SCREEN_WIDTH * 0.05), int(SCREEN_HEIGHT * 0.80)),
+                    "default": (int(SCREEN_WIDTH * 0.28), int(SCREEN_HEIGHT * 0.80)),
+                    "save_back": (int(SCREEN_WIDTH * 0.51), int(SCREEN_HEIGHT * 0.80)),
+                    "save": (int(SCREEN_WIDTH * 0.74), int(SCREEN_HEIGHT * 0.80)),
+                }
+                continue
             elif ( event.type == pygame.MOUSEBUTTONDOWN 
                 or ( event.type == pygame.MOUSEMOTION and getattr(event, "buttons", (0,))[0] ) 
               ) and slider_x <= event.pos[0] <= slider_x + slider_width and slider_y - 10 <= event.pos[1] <= slider_y + slider_height + 10:
                 mouse_pos = event.pos
                 # --- Повзунок гучності ---
-                #if (slider_x <= mouse_pos[0] <= slider_x + slider_width and
-                #  slider_y - 10 <= mouse_pos[1] <= slider_y + slider_height + 10):
-                ### DEBUG ###
-                print(f"MOUSE ={event.type},{getattr(event, "buttons", (0,))[0]},")
+                print(f"MOUSE ={event.type},{getattr(event, 'buttons', (0,))[0]},")
                 new_volume = (mouse_pos[0] - slider_x) / slider_width
                 new_volume = max(0, min(1, new_volume))
                 current_volume = new_volume

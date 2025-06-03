@@ -14,7 +14,8 @@ from engine.parser import parse_level_file
 pygame.init()
 
 # Константи
-SCREEN_WIDTH, SCREEN_HEIGHT = 1920, 1080
+display_info = pygame.display.Info()
+SCREEN_WIDTH, SCREEN_HEIGHT = display_info.current_w, display_info.current_h
 TILE_SIZE = 100
 
 # Базовий шлях до ресурсів
@@ -299,12 +300,11 @@ def generate_background_grid(textures, level_data, level_name):
     :return: Сітка текстур
     """
     grid = []
-    for y in range(0, level_data['height'] * TILE_SIZE, TILE_SIZE):  # Використання висоти рівня
+    for y in range(0, level_data['height'] * TILE_SIZE, TILE_SIZE):
         row = []
-        for x in range(0, level_data['width'] * TILE_SIZE, TILE_SIZE):  # Використання ширини рівня
-            if level_name == "level1.lvl":
-                row.append(textures['dangeon_floor'])  # Використовуємо текстуру 'dangeon_floor' для level1
-            else:
+        for x in range(0, level_data['width'] * TILE_SIZE, TILE_SIZE):
+            if level_name == "level0.lvl":
+                # Для стартовой локации трава
                 random_grass = random.choice([
                     textures['grass1'],
                     textures['grass2'],
@@ -313,8 +313,11 @@ def generate_background_grid(textures, level_data, level_name):
                     textures['grass5'],
                     textures['grass6'],
                     textures['grass7']
-                ])  # Випадкова текстура трави для інших рівнів
+                ])
                 row.append(random_grass)
+            else:
+                # Для всех остальных — каменный пол
+                row.append(textures['dangeon_floor'])
         grid.append(row)
     return grid
 
