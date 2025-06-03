@@ -2003,7 +2003,7 @@ while running:
 
                         cursor.draw(screen)
                         pygame.display.flip()
-            continue
+                continue
 
         if showing_saves:
             slot_rects, save_rect, load_rect, back_rect = render_saves_menu(screen, menu_font, pause_menu_image, pause_menu_buttons, SAVE_SLOTS, selected_save_slot)
