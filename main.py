@@ -1373,42 +1373,8 @@ while running:
         # --- Обробка подій рівня ---
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                running = False
-            elif event.type == pygame.VIDEORESIZE:
-                SCREEN_WIDTH, SCREEN_HEIGHT = event.size
-                screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.RESIZABLE)
-                update_scaled_images()
-                # Update fonts
-                font = pygame.font.Font("assets/fonts/Hitch-hike.otf", int(SCREEN_HEIGHT * 0.1))
-                title_font = pygame.font.Font("assets/fonts/Hitch-hike.otf", int(SCREEN_HEIGHT * 0.145)) 
-                menu_font = pygame.font.Font("assets/fonts/Hitch-hike.otf", int(SCREEN_HEIGHT * 0.047))
-                settings_font = pygame.font.Font("assets/fonts/Hitch-hike.otf", int(SCREEN_HEIGHT * 0.075))
-                # Update main menu background
-                mainmenu_bg = pygame.image.load(str(INTERFACE_DIR / "mainmenu.png")).convert_alpha()
-                mainmenu_bg = pygame.transform.smoothscale(mainmenu_bg, (SCREEN_WIDTH, SCREEN_HEIGHT))
-                # Update menu/button positions
-                MENU_X = int(SCREEN_WIDTH * 0.07)
-                menu_positions = [
-                    (MENU_X, int(SCREEN_HEIGHT * 0.4)),
-                    (MENU_X, int(SCREEN_HEIGHT * 0.52)),
-                    (MENU_X, int(SCREEN_HEIGHT * 0.64)),
-                    (MENU_X, int(SCREEN_HEIGHT * 0.76))
-                ]
-                pause_menu_rect = pause_menu_image.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2))
-                settings_menu_rect = settings_menu_image.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2))
-                button_positions = {
-                    "continue": (int(SCREEN_WIDTH * 0.39), int(SCREEN_HEIGHT * 0.4)),
-                    "saves": (int(SCREEN_WIDTH * 0.39), int(SCREEN_HEIGHT * 0.55)),
-                    "exit": (int(SCREEN_WIDTH * 0.39), int(SCREEN_HEIGHT * 0.7)),
-                }
-                settings_button_positions = {
-                    "back": (int(SCREEN_WIDTH * 0.05), int(SCREEN_HEIGHT * 0.80)),
-                    "default": (int(SCREEN_WIDTH * 0.28), int(SCREEN_HEIGHT * 0.80)),
-                    "save_back": (int(SCREEN_WIDTH * 0.51), int(SCREEN_HEIGHT * 0.80)),
-                    "save": (int(SCREEN_WIDTH * 0.74), int(SCREEN_HEIGHT * 0.80)),
-                }
-                # Do NOT break or continue here, let the frame finish!
-            # --- Додано: обробка подій меню паузи ---
+                    running = False
+            # --- Обробка подій меню паузи ---
             if is_paused and not showing_stats and not showing_settings:
                 if event.type == pygame.MOUSEBUTTONDOWN:
                     mouse_pos = event.pos
@@ -1850,7 +1816,6 @@ while running:
                     windowed_rect = pygame.Rect(int(SCREEN_WIDTH * 0.42), int(SCREEN_HEIGHT * 0.45) + int(SCREEN_HEIGHT * 0.09), 30, 30)
                     if windowed_rect.collidepoint(mouse_pos):
                         settings["fullscreen"] = not settings.get("fullscreen", False)
-                        # --- Переход в оконный режим при снятии флажка ---
                         if settings["fullscreen"]:
                             screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.FULLSCREEN)
                         else:
@@ -1928,31 +1893,15 @@ while running:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
-            # --- Добавлено: обработка ресайза окна в меню настроек ---
-            elif event.type == pygame.VIDEORESIZE:
-                SCREEN_WIDTH, SCREEN_HEIGHT = event.w, event.h
-                screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.RESIZABLE)
-                update_scaled_images()
-                pause_menu_rect = pause_menu_image.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2))
-                settings_menu_rect = settings_menu_image.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2))
-                button_positions = {
-                    "continue": (int(SCREEN_WIDTH * 0.39), int(SCREEN_HEIGHT * 0.4)),
-                    "saves": (int(SCREEN_WIDTH * 0.39), int(SCREEN_HEIGHT * 0.55)),
-                    "exit": (int(SCREEN_WIDTH * 0.39), int(SCREEN_HEIGHT * 0.7)),
-                }
-                settings_button_positions = {
-                    "back": (int(SCREEN_WIDTH * 0.05), int(SCREEN_HEIGHT * 0.80)),
-                    "default": (int(SCREEN_WIDTH * 0.28), int(SCREEN_HEIGHT * 0.80)),
-                    "save_back": (int(SCREEN_WIDTH * 0.51), int(SCREEN_HEIGHT * 0.80)),
-                    "save": (int(SCREEN_WIDTH * 0.74), int(SCREEN_HEIGHT * 0.80)),
-                }
-                continue
             elif ( event.type == pygame.MOUSEBUTTONDOWN 
                 or ( event.type == pygame.MOUSEMOTION and getattr(event, "buttons", (0,))[0] ) 
               ) and slider_x <= event.pos[0] <= slider_x + slider_width and slider_y - 10 <= event.pos[1] <= slider_y + slider_height + 10:
                 mouse_pos = event.pos
                 # --- Повзунок гучності ---
-                print(f"MOUSE ={event.type},{getattr(event, 'buttons', (0,))[0]},")
+                #if (slider_x <= mouse_pos[0] <= slider_x + slider_width and
+                #  slider_y - 10 <= mouse_pos[1] <= slider_y + slider_height + 10):
+                ### DEBUG ###
+                print(f"MOUSE ={event.type},{getattr(event, "buttons", (0,))[0]},")
                 new_volume = (mouse_pos[0] - slider_x) / slider_width
                 new_volume = max(0, min(1, new_volume))
                 current_volume = new_volume
