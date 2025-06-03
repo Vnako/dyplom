@@ -150,17 +150,18 @@ pause_menu_rect = pause_menu_image.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HE
 
 # Розташування кнопок на зображенні паузи
 button_positions = {
-    "continue": (int(SCREEN_WIDTH * 0.39), int(SCREEN_HEIGHT * 0.4)),
-    "saves": (int(SCREEN_WIDTH * 0.39), int(SCREEN_HEIGHT * 0.55)),
-    "exit": (int(SCREEN_WIDTH * 0.39), int(SCREEN_HEIGHT * 0.7)),
+    "continue": (int(SCREEN_WIDTH * 0.41), int(SCREEN_HEIGHT * 0.4)),
+    "saves": (int(SCREEN_WIDTH * 0.41), int(SCREEN_HEIGHT * 0.5)),
+    "settings": (int(SCREEN_WIDTH * 0.41), int(SCREEN_HEIGHT * 0.6)),
+    "exit": (int(SCREEN_WIDTH * 0.41), int(SCREEN_HEIGHT * 0.7)),
 }
 
 # Розташування кнопок на зображенні налаштувань
 settings_button_positions = {
-    "back": (int(SCREEN_WIDTH * 0.05), int(SCREEN_HEIGHT * 0.80)),
-    "default": (int(SCREEN_WIDTH * 0.28), int(SCREEN_HEIGHT * 0.80)),
-    "save_back": (int(SCREEN_WIDTH * 0.51), int(SCREEN_HEIGHT * 0.80)),
-    "save": (int(SCREEN_WIDTH * 0.74), int(SCREEN_HEIGHT * 0.80)),
+    "back": (int(SCREEN_WIDTH * 0.12), int(SCREEN_HEIGHT * 0.75)),
+    "default": (int(SCREEN_WIDTH * 0.31), int(SCREEN_HEIGHT * 0.75)),
+    "save_back": (int(SCREEN_WIDTH * 0.51), int(SCREEN_HEIGHT * 0.75)),
+    "save": (int(SCREEN_WIDTH * 0.7), int(SCREEN_HEIGHT * 0.75))
 }
 
 # Завантаження зображення для меню налаштувань
@@ -187,7 +188,7 @@ def render_button_text(screen, menu_font, button_name, button_pos, button_image,
                                                     button_pos[1] + button_image.get_height() // 2))
     screen.blit(button_text, button_text_rect)
 
-def render_pause_menu(screen, pause_menu_image, pause_menu_buttons, button_positions, title_font, font, menu_font):
+def render_pause_menu(screen, pause_menu_image, pause_menu_buttons, button_positions, title_font, menu_font):
     """
     Малює вікно паузи та кнопки на екрані.
     """
@@ -205,6 +206,7 @@ def render_pause_menu(screen, pause_menu_image, pause_menu_buttons, button_posit
         render_button_text(screen, menu_font, button_name, button_pos, pause_menu_buttons, {
             "continue": "Продовжити",
             "saves": "Збереження",
+            "settings": "Налаштування",
             "exit": "Вихід"
         })
 
@@ -644,20 +646,20 @@ def load_game(slot=1):
         print(f"Помилка завантаження гри з слоту {slot}: {e}")
         return False
 
-def render_saves_menu(screen, menu_font, pause_menu_image, pause_menu_buttons, slot_count=SAVE_SLOTS, selected_slot=None):
+def render_saves_menu(screen, menu_font, setings_menu_image, pause_menu_buttons, slot_count=SAVE_SLOTS, selected_slot=None):
     """
     Render a wide saves menu with slot selection and Save/Load/Back buttons.
     Shows save date/time for each slot.
     """
-    # Wide form background
+
+    # Використовуємо settings_menu_image як фон
+    screen.blit(settings_menu_image, settings_menu_rect)
+    
     wide_width = int(SCREEN_WIDTH * 0.7)
     wide_height = int(SCREEN_HEIGHT * 0.7)
     wide_x = (SCREEN_WIDTH - wide_width) // 2
     wide_y = (SCREEN_HEIGHT - wide_height) // 2
-    wide_rect = pygame.Rect(wide_x, wide_y, wide_width, wide_height)
-    pygame.draw.rect(screen, (40, 40, 60), wide_rect, border_radius=30)
-    pygame.draw.rect(screen, (120, 120, 180), wide_rect, 4, border_radius=30)
-
+    
     saves_title = title_font.render("Збереження", True, (255, 255, 255))
     saves_title_rect = saves_title.get_rect(center=(SCREEN_WIDTH // 2, wide_y + int(wide_height * 0.09)))
     screen.blit(saves_title, saves_title_rect)
@@ -668,7 +670,7 @@ def render_saves_menu(screen, menu_font, pause_menu_image, pause_menu_buttons, s
     slot_area_y = wide_y + int(wide_height * 0.18)
     slot_area_w = wide_width - int(wide_width * 0.16)
     slot_spacing = int((wide_height * 0.5) // slot_count)
-    slot_has_save = {}  # Track if slot has save
+    slot_has_save = {}
     for i in range(1, slot_count + 1):
         y = slot_area_y + (i - 1) * slot_spacing
         # Slot background
@@ -708,14 +710,14 @@ def render_saves_menu(screen, menu_font, pause_menu_image, pause_menu_buttons, s
             save_rect = pygame.Rect(save_btn_pos, (btn_w, btn_h))
             btn_x += int(wide_width * 0.24)
     # Load (only if slot has save)
-    if slot_has_save.get(selected_slot, False):
+    if selected_slot is not None and slot_has_save.get(selected_slot, False):
         load_btn_pos = (btn_x, bottom_y)
         screen.blit(pause_menu_buttons, load_btn_pos)
         load_text = menu_font.render("Завантажити", True, (255, 255, 255))
         load_text_rect = load_text.get_rect(center=(load_btn_pos[0] + btn_w // 2, load_btn_pos[1] + btn_h // 2))
         screen.blit(load_text, load_text_rect)
         load_rect = pygame.Rect(load_btn_pos, (btn_w, btn_h))
-        btn_x += int(wide_width * 0.24)
+        btn_x += int(wide_width * 0.25)
     # Back
     back_btn_pos = (wide_x + int(wide_width * 0.66), bottom_y)
     screen.blit(pause_menu_buttons, back_btn_pos)
@@ -738,12 +740,12 @@ def render_game_over(screen, title_font, menu_font):
     text_rect = text.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 80))
     screen.blit(text, text_rect)
     # Button
-    btn_w, btn_h = 320, 80
+    # --- Заміна малювання прямокутника на pause_menu_buttons ---
+    btn_w, btn_h = pause_menu_buttons.get_width(), pause_menu_buttons.get_height()
     btn_x = (SCREEN_WIDTH - btn_w) // 2
     btn_y = SCREEN_HEIGHT // 2 + 10
     button_rect = pygame.Rect(btn_x, btn_y, btn_w, btn_h)
-    pygame.draw.rect(screen, (60, 60, 90), button_rect, border_radius=16)
-    pygame.draw.rect(screen, (255, 255, 255), button_rect, 3, border_radius=16)
+    screen.blit(pause_menu_buttons, (btn_x, btn_y))
     btn_text = menu_font.render("Почати спочатку", True, (255, 255, 255))
     btn_text_rect = btn_text.get_rect(center=button_rect.center)
     screen.blit(btn_text, btn_text_rect)
@@ -759,12 +761,8 @@ npcs = []
 camera = None
 background_grid = None
 pressed_keys = set()
-level_data = None  # <-- Ensure this is defined globally
-
-# --- Додаємо: збереження стану гемів між рівнями ---
+level_data = None 
 player_gems_state = {}
-
-# --- Додаємо: збереження стану статуй між рівнями ---
 statues_state = {}
 
 def save_player_gems_state(player):
@@ -823,9 +821,8 @@ def restore_statues_state(statues):
         print(f"[DEBUG] restore_statues_state (player_stats): {player_stats_state}")
 
 def debug_state():
-    print(f"showing_menu={showing_menu}, showing_level={showing_level}, showing_settings={showing_settings}, is_paused={is_paused}")
+    print(f"showing_menu={showing_menu}, showing_level={showing_level}, showing_settings={showing_settings}, is_paused={is_paused}, showing_saves={showing_saves}")
 
-# --- Додаємо визначення running та showing_saves та інших станів перед основним циклом ---
 running = True
 showing_menu = True
 showing_level = False
@@ -884,126 +881,6 @@ def update_and_draw_damage_popups(screen, camera):
 while running:
     clock.tick(60)
     global rotating_image, rotating_image_rect, rotation_angle
-
-    # --- Game Over Screen ---
-    if showing_game_over:
-        screen.blit(mainmenu_bg, (0, 0))
-        button_rect = render_game_over(screen, title_font, menu_font)
-        # --- draw cursor before flip ---
-        cursor.draw(screen)
-        pygame.display.flip()
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                running = False
-            elif event.type == pygame.MOUSEBUTTONDOWN:
-                if button_rect.collidepoint(event.pos):
-                    # --- Скидаємо стан гри та запускаємо нову гру ---
-                    showing_game_over = False
-                    showing_menu = False
-                    showing_level = True
-                    level_path = LEVELS_DIR / "level0.lvl"
-                    player = None
-                    camera = None
-                    background_grid = None
-                    blocks = []
-                    enemies = []
-                    items = []
-                    statues = []
-                    npcs = []
-                    pressed_keys.clear()
-                    showing_stats = False
-                    is_paused = False
-                    showing_settings = False
-                    showing_saves = False
-                    selected_save_slot = None
-                    level_data = None
-                    player_gems_state = {}
-                    statues_state = {}
-                    boss_defeated_and_portal_used = False
-                    current_level_number = 1  # Reset level cycle
-                    break
-            elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_RETURN or event.key == pygame.K_SPACE:
-                    showing_game_over = False
-                    showing_menu = False
-                    showing_level = True
-                    level_path = LEVELS_DIR / "level0.lvl"
-                    player = None
-                    camera = None
-                    background_grid = None
-                    blocks = []
-                    enemies = []
-                    items = []
-                    statues = []
-                    npcs = []
-                    pressed_keys.clear()
-                    showing_stats = False
-                    is_paused = False
-                    showing_settings = False
-                    showing_saves = False
-                    selected_save_slot = None
-                    level_data = None
-                    player_gems_state = {}
-                    statues_state = {}
-                    boss_defeated_and_portal_used = False
-                    current_level_number = 1  # Reset level cycle
-                    break
-        continue
-
-    # --- Handle saves menu globally ---
-    if showing_saves:
-        slot_rects, save_rect, load_rect, back_rect = render_saves_menu(screen, menu_font, pause_menu_image, pause_menu_buttons, SAVE_SLOTS, selected_save_slot)
-        # --- draw cursor before flip ---
-        cursor.draw(screen)
-        pygame.display.flip()
-        load_requested = False
-        load_slot = None
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                running = False
-            elif event.type == pygame.MOUSEBUTTONDOWN:
-                mouse_pos = event.pos
-                for slot, rect in slot_rects:
-                    if rect.collidepoint(mouse_pos):
-                        selected_save_slot = slot
-                        break
-                # --- Проверяем, можно ли сохранять (только если есть активный уровень и игрок) ---
-                if save_rect and save_rect.collidepoint(mouse_pos):
-                    if globals().get("showing_level", False) and globals().get("player", None) is not None and selected_save_slot is not None:
-                        save_game(selected_save_slot)
-                        # После сохранения сразу обновляем меню, чтобы дата обновилась
-                        slot_rects, save_rect, load_rect, back_rect = render_saves_menu(
-                            screen, menu_font, pause_menu_image, pause_menu_buttons, SAVE_SLOTS, selected_save_slot
-                        )
-                        cursor.draw(screen)
-                        pygame.display.flip()
-                    else:
-                        print("Нельзя сохранить: игра не запущена!")
-                if load_rect and load_rect.collidepoint(mouse_pos):
-                    if selected_save_slot is not None:
-                        load_requested = True
-                        load_slot = selected_save_slot
-                        break  # сразу выходим из цикла событий
-                if back_rect and back_rect.collidepoint(mouse_pos):
-                    showing_saves = False
-                    is_paused = True
-                    selected_save_slot = None
-                    break
-            elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_ESCAPE:
-                    selected_save_slot = None
-                    showing_saves = False
-                    is_paused = True
-        # --- если была нажата кнопка "Завантажити", загружаем сохранение сразу ---
-        if load_requested and load_slot is not None:
-            loaded = load_game(load_slot)
-            if loaded:
-                showing_saves = False
-                showing_level = True
-                showing_menu = False
-                is_paused = False
-                selected_save_slot = None
-        continue
 
     if showing_menu:
         # Відтворення menu1.wav, якщо ще не відтворювалася
@@ -1128,18 +1005,16 @@ while running:
                                 showing_menu = False
                                 showing_settings = True
                                 debug_state()
-                                break
 
                 elif showing_settings:
-                    for button_name, button_pos in settings_button_positions.items():
-                        button_rect = settings_menu_buttons.get_rect(topleft=button_pos)
-                        if button_rect.collidepoint(mouse_pos):
-                            print(f"Кнопка '{button_name}' натиснута в меню налаштувань.")
-                            if button_name == "back":
-                                showing_settings = False
-                elif event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_ESCAPE:
-                        showing_settings = False
+                    overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+                    screen.blit(overlay, (0, 0))
+                    render_settings_menu(screen, settings_menu_image, settings_menu_buttons, settings_button_positions, title_font, settings_font, menu_font)
+                    pygame.display.flip()
+                    if event.type == pygame.KEYDOWN:
+                        if event.key == pygame.K_ESCAPE:
+                            showing_settings = False
+                    continue
                 elif event.type == pygame.KEYUP:
                     if event.key in pressed_keys:
                         pressed_keys.discard(event.key)
@@ -1265,9 +1140,6 @@ while running:
                 background_grid = generate_background_grid(textures, level_data, "cave")
             else:
                 background_grid = generate_background_grid(textures, level_data, level_name)
-
-            # 8. Функція determine_block_texture(x, y, blocks_set)
-            # Визначення текстури блоку за оточенням — дублюється у кількох місцях.
 
             # Функція для визначення текстури блоку залежно від оточення
             def determine_block_texture(x, y, blocks_set):
@@ -1448,6 +1320,7 @@ while running:
         # --- Обробка подій рівня ---
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
+
                 running = False
             elif event.type == pygame.VIDEORESIZE:
                 SCREEN_WIDTH, SCREEN_HEIGHT = event.size
@@ -1510,53 +1383,33 @@ while running:
                 if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                     is_paused = False
                     break  # <-- заменено continue на break
+
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
                     if showing_stats:
                         showing_stats = False
+                        debug_state()
                     elif showing_settings:
                         showing_settings = False
                         is_paused = True
-                    else:
-                        if not is_paused and not showing_stats and not showing_settings:
-                            is_paused = True
-                            render_pause_menu(screen, pause_menu_image, pause_menu_buttons, button_positions, title_font, font, menu_font)
+                        debug_state()
+                    elif showing_saves:
+                        showing_saves = False
+                        is_paused = True
+                        debug_state()
+                    elif is_paused:
+                        is_paused = False
+                        debug_state()
+                    elif not is_paused and not showing_stats and not showing_settings:
+                        is_paused = True
+                        debug_state()
                 elif event.key == pygame.K_c:
                     showing_stats = not showing_stats
-                elif not showing_stats and not showing_settings:
-                    pressed_keys.add(event.key)
             elif event.type == pygame.KEYUP:
                 if event.key in pressed_keys:
                     pressed_keys.discard(event.key)
-            elif is_paused and not showing_stats and not showing_settings:
-                if event.type == pygame.MOUSEBUTTONDOWN:
-                    mouse_pos = event.pos
-                    for button_name, button_pos in button_positions.items():
-                        button_rect = pause_menu_buttons.get_rect(topleft=button_pos)
-                        if button_rect.collidepoint(mouse_pos):
-                            print(f"Кнопка '{button_name}' натиснута.")
-                            if button_name == "continue":
-                                is_paused = False
-                            elif button_name == "saves":
-                                print("Відкриття меню збережень...")
-                                # --- Исправлено: открываем меню сохранений ---
-                                showing_saves = True
-                                is_paused = False
-                                selected_save_slot = None
-                                # Не переключаем showing_level, остаёмся в игре
-                                break
-                            elif button_name == "exit":
-                                showing_level = False
-                                showing_menu = True
-                                is_paused = False
-                    break  # <-- заменено continue на break
-                # ВАЖЛИВО: обробка ESC має бути тут, а не в окремому elif нижче!
-                if event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
-                    is_paused = False
-                break  # <-- заменено continue на break
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 3:  # ПКМ
                 mouse_pos = event.pos
-
                 print(f"[DEBUG] ПКМ координати кліку: {mouse_pos}")
                 clicked_any_statue = False
                 for statue in statues:
@@ -1714,7 +1567,136 @@ while running:
                         # --- Якщо все умови виконані, відкриваємо сундук ---
                         item.current_frame = 1
                         item.clicked_time = pygame.time.get_ticks()
-            
+        if is_paused:
+            render_pause_menu(screen, pause_menu_image, pause_menu_buttons, button_positions, title_font, menu_font)
+            if event.type == pygame.MOUSEBUTTONDOWN:
+                mouse_pos = event.pos
+                for button_name, button_pos in button_positions.items():
+                    button_rect = pause_menu_buttons.get_rect(topleft=button_pos)
+                    if button_rect.collidepoint(mouse_pos):
+                        print(f"Кнопка '{button_name}' натиснута.")
+                        if button_name == "continue":
+                            is_paused = False
+                            debug_state()
+                        elif button_name == "saves":
+                            print("Відкриття меню збережень...")
+                            showing_saves = True
+                            is_paused = False
+                            selected_save_slot = None
+                            debug_state()
+                        elif button_name == "settings":
+                            print("Відкриття меню налаштувань...")
+                            showing_settings = True
+                            is_paused = False
+                            debug_state()
+                        elif button_name == "exit":
+                            showing_level = False
+                            showing_menu = True
+                            is_paused = False
+                            debug_state()
+        
+        if showing_settings:
+            overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+            screen.blit(overlay, (0, 0))
+            render_settings_menu(screen, settings_menu_image, settings_menu_buttons, settings_button_positions, title_font, settings_font, menu_font)
+            slider_x = int(SCREEN_WIDTH * 0.26)
+            slider_y = int(SCREEN_HEIGHT * 0.36)
+            slider_width = int(SCREEN_WIDTH * 0.22)
+            slider_height = 10
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    running = False
+                elif ( event.type == pygame.MOUSEBUTTONDOWN or ( event.type == pygame.MOUSEMOTION and getattr(event, "buttons", (0,))[0] )) and slider_x <= event.pos[0] <= slider_x + slider_width and slider_y - 10 <= event.pos[1] <= slider_y + slider_height + 10:
+                    mouse_pos = event.pos
+                    # --- Повзунок гучності ---
+                    #if (slider_x <= mouse_pos[0] <= slider_x + slider_width and
+                    #  slider_y - 10 <= mouse_pos[1] <= slider_y + slider_height + 10):
+                    ### DEBUG ###
+                    print(f"MOUSE ={event.type},{getattr(event, "buttons", (0,))[0]},")
+                    new_volume = (mouse_pos[0] - slider_x) / slider_width
+                    new_volume = max(0, min(1, new_volume))
+                    current_volume = new_volume
+                    pygame.mixer.music.set_volume(current_volume)
+                    settings["volume"] = int(current_volume * 100)
+                elif event.type == pygame.MOUSEBUTTONDOWN: 
+                    mouse_pos = event.pos
+                    # --- Кнопки меню налаштувань ---
+                    for button_name, button_pos in settings_button_positions.items():
+                        button_rect = settings_menu_buttons.get_rect(topleft=button_pos)
+                        if button_rect.collidepoint(mouse_pos):
+                            print(f"Кнопка '{button_name}' натиснута в меню налаштувань.")
+                            if button_name == "back":
+                                loaded_settings = load_settings_from_file()
+                                if loaded_settings:
+                                    settings.clear()
+                                    settings.update(loaded_settings)
+                                    current_volume = settings.get("volume", 100) / 100
+                                    pygame.mixer.music.set_volume(current_volume)
+                                showing_settings = False
+                            elif button_name == "default":
+                                set_default_settings()
+                            elif button_name == "save_back":
+                                settings["volume"] = int(current_volume * 100)
+                                save_settings_to_file(settings)
+                                showing_settings = False
+                            elif button_name == "save":
+                                settings["volume"] = int(current_volume * 100)
+                                save_settings_to_file(settings)
+                    # --- Чекбокси ---
+                    hints_rect = pygame.Rect(int(SCREEN_WIDTH * 0.42), int(SCREEN_HEIGHT * 0.45), 30, 30)
+                    if hints_rect.collidepoint(mouse_pos):
+                        settings["hints"] = not settings.get("hints", True)
+                    windowed_rect = pygame.Rect(int(SCREEN_WIDTH * 0.42), int(SCREEN_HEIGHT * 0.45) + int(SCREEN_HEIGHT * 0.09), 30, 30)
+                    if windowed_rect.collidepoint(mouse_pos):
+                        settings["fullscreen"] = not settings.get("fullscreen", False)
+                        if settings["fullscreen"]:
+                            screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.FULLSCREEN)
+                        else:
+                            screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.RESIZABLE)
+                    level_select_rect = pygame.Rect(int(SCREEN_WIDTH * 0.42), int(SCREEN_HEIGHT * 0.45) + 2 * int(SCREEN_HEIGHT * 0.09), 30, 30)
+                    if level_select_rect.collidepoint(mouse_pos):
+                        settings["level_select"] = not settings.get("level_select", False)
+                elif event.type == pygame.MOUSEMOTION and getattr(event, "buttons", (0,))[0]:
+                    # --- Повзунок гучності drag ---
+                    mouse_pos = event.pos
+                    if (slider_x <= mouse_pos[0] <= slider_x + slider_width and
+                        slider_y - 10 <= mouse_pos[1] <= slider_y + slider_height + 10):
+                        new_volume = (mouse_pos[0] - slider_x) / slider_width
+                        new_volume = max(0, min(1, new_volume))
+                        current_volume = new_volume
+                        pygame.mixer.music.set_volume(current_volume)
+                        settings["volume"] = int(current_volume * 100)
+                elif event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_ESCAPE:
+                        showing_settings = False
+                elif event.type == pygame.KEYUP:
+                    if event.key in pressed_keys:
+                        pressed_keys.discard(event.key)
+            pygame.display.flip()
+            continue
+        elif showing_saves:
+            slot_rects, save_rect, load_rect, back_rect = render_saves_menu(screen, menu_font, pause_menu_image, pause_menu_buttons, SAVE_SLOTS, selected_save_slot)
+            pygame.display.flip()
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    running = False
+                elif event.type == pygame.MOUSEBUTTONDOWN:
+                    mouse_pos = event.pos
+                    for slot, rect in slot_rects:
+                        if rect.collidepoint(mouse_pos):
+                            selected_save_slot = slot
+                            break
+                    if back_rect and back_rect.collidepoint(mouse_pos):
+                        showing_saves = False
+                        is_paused = True
+                        selected_save_slot = None
+                        break
+                elif event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_ESCAPE:
+                        selected_save_slot = None
+                        showing_saves = False
+                        is_paused = True
+            continue
         current_time = pygame.time.get_ticks()
         for item in items:
             if item.current_frame == 1:
@@ -1837,7 +1819,8 @@ while running:
                         enemies.remove(enemy)
         
             keys = {pygame.K_w, pygame.K_a, pygame.K_s, pygame.K_d}
-            active_keys = {key for key in pressed_keys if key in keys}
+            pressed = pygame.key.get_pressed()
+            active_keys = {key for key in keys if pressed[key]}
             player.handle_input(active_keys)
             if not active_keys:
                 player.dx = 0
@@ -1925,15 +1908,25 @@ while running:
                     break
 
         # --- Рендер меню налаштувань після обробки подій ---
-        if showing_settings:
-            overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
-            screen.blit(overlay, (0, 0))
-            render_settings_menu(screen, settings_menu_image, settings_menu_buttons, settings_button_positions, title_font, settings_font, menu_font)
-            slider_x = int(SCREEN_WIDTH * 0.26)
-            slider_y = int(SCREEN_HEIGHT * 0.36)
-            slider_width = int(SCREEN_WIDTH * 0.22)
-            slider_height = 10
-            for event in pygame.event.get():
+    if showing_settings:
+        overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+        screen.blit(mainmenu_bg, (0, 0))  # Малюємо фон головного меню
+        screen.blit(overlay, (0, 0))     # Малюємо напівпрозорий шар
+        if 'rotating_image' not in globals() or 'rotating_image_rect' not in globals():
+            update_scaled_images()
+        try:
+            rotation_angle = (rotation_angle + 1) % 360  # Збільшуємо кут обертання
+        except NameError:
+            rotation_angle = 0
+        rotated_image = pygame.transform.rotate(rotating_image, rotation_angle)
+        rotated_rect = rotated_image.get_rect(center=rotating_image_rect.center)
+        screen.blit(rotated_image, rotated_rect.topleft)
+        render_settings_menu(screen, settings_menu_image, settings_menu_buttons, settings_button_positions,title_font, settings_font, menu_font)
+        slider_x = int(SCREEN_WIDTH * 0.26)
+        slider_y = int(SCREEN_HEIGHT * 0.36)
+        slider_width = int(SCREEN_WIDTH * 0.22)
+        slider_height = 10
+        for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     running = False
                 elif ( event.type == pygame.MOUSEBUTTONDOWN 
@@ -1952,6 +1945,7 @@ while running:
                     settings["volume"] = int(current_volume * 100)
                 elif event.type == pygame.MOUSEBUTTONDOWN: 
                     mouse_pos = event.pos
+                    # --- Кнопки меню налаштувань ---
                     for button_name, button_pos in settings_button_positions.items():
                         button_rect = settings_menu_buttons.get_rect(topleft=button_pos)
                         if button_rect.collidepoint(mouse_pos):
@@ -1975,7 +1969,7 @@ while running:
                             elif button_name == "save":
                                 settings["volume"] = int(current_volume * 100)
                                 save_settings_to_file(settings)
-                                    # --- Чекбокси ---
+                    # --- Чекбокси ---
                     hints_rect = pygame.Rect(int(SCREEN_WIDTH * 0.42), int(SCREEN_HEIGHT * 0.45), 30, 30)
                     if hints_rect.collidepoint(mouse_pos):
                         settings["hints"] = not settings.get("hints", True)
@@ -1990,7 +1984,6 @@ while running:
                     level_select_rect = pygame.Rect(int(SCREEN_WIDTH * 0.42), int(SCREEN_HEIGHT * 0.45) + 2 * int(SCREEN_HEIGHT * 0.09), 30, 30)
                     if level_select_rect.collidepoint(mouse_pos):
                         settings["level_select"] = not settings.get("level_select", False)
-
                 elif event.type == pygame.MOUSEMOTION and getattr(event, "buttons", (0,))[0]:
                     # --- Повзунок гучності drag ---
                     mouse_pos = event.pos
@@ -2007,6 +2000,7 @@ while running:
                 elif event.type == pygame.KEYUP:
                     if event.key in pressed_keys:
                         pressed_keys.discard(event.key)
+
                         cursor.draw(screen)
                         pygame.display.flip()
             continue
@@ -2185,9 +2179,10 @@ while running:
             pygame.display.flip()
             continue  # Просто малюємо меню паузи і переходимо до наступного кадру
         cursor.draw(screen)
+
         pygame.display.flip()
-    elif showing_settings:
-        # --- Додаємо напівпрозорий фон для меню налаштувань з головного меню ---
+        continue
+    elif showing_saves:
         overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
         screen.blit(mainmenu_bg, (0, 0))  # Малюємо фон головного меню
         screen.blit(overlay, (0, 0))     # Малюємо напівпрозорий шар
@@ -2200,14 +2195,12 @@ while running:
         rotated_image = pygame.transform.rotate(rotating_image, rotation_angle)
         rotated_rect = rotated_image.get_rect(center=rotating_image_rect.center)
         screen.blit(rotated_image, rotated_rect.topleft)
-        render_settings_menu(screen, settings_menu_image, settings_menu_buttons, settings_button_positions, title_font, settings_font, menu_font)
-        slider_x = int(SCREEN_WIDTH * 0.26)
-        slider_y = int(SCREEN_HEIGHT * 0.36)
-        slider_width = int(SCREEN_WIDTH * 0.22)
-        slider_height = 10
+        slot_rects, save_rect, load_rect, back_rect = render_saves_menu(screen, menu_font, pause_menu_image, pause_menu_buttons, SAVE_SLOTS, selected_save_slot)
+        pygame.display.flip()
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
+
             # --- Добавлено: обработка ресайза окна в меню настроек ---
             elif event.type == pygame.VIDEORESIZE:
                 SCREEN_WIDTH, SCREEN_HEIGHT = event.w, event.h
@@ -2238,55 +2231,85 @@ while running:
                 current_volume = new_volume
                 pygame.mixer.music.set_volume(current_volume)
                 settings["volume"] = int(current_volume * 100)
-            elif event.type == pygame.MOUSEBUTTONDOWN: 
+            elif event.type == pygame.MOUSEBUTTONDOWN:
                 mouse_pos = event.pos
-                # --- Кнопки меню налаштувань ---
-                for button_name, button_pos in settings_button_positions.items():
-                    button_rect = settings_menu_buttons.get_rect(topleft=button_pos)
-                    if button_rect.collidepoint(mouse_pos):
-                        print(f"Кнопка '{button_name}' натиснута в меню налаштувань.")
-                        if button_name == "back":
-                            loaded_settings = load_settings_from_file()
-                            if loaded_settings:
-                                settings.clear()
-                                settings.update(loaded_settings)
-                                current_volume = settings.get("volume", 100) / 100
-                                pygame.mixer.music.set_volume(current_volume)
-                            showing_settings = False
-                            showing_menu = True
-                        elif button_name == "default":
-                            set_default_settings()
-                        elif button_name == "save_back":
-                            settings["volume"] = int(current_volume * 100)
-                            save_settings_to_file(settings)
-                            showing_settings = False
-                            showing_menu = True
-                        elif button_name == "save":
-                            settings["volume"] = int(current_volume * 100)
-                            save_settings_to_file(settings)
-                # --- Чекбокси ---
-                hints_rect = pygame.Rect(int(SCREEN_WIDTH * 0.42), int(SCREEN_HEIGHT * 0.45), 30, 30)
-                if hints_rect.collidepoint(mouse_pos):
-                    settings["hints"] = not settings.get("hints", True)
-                windowed_rect = pygame.Rect(int(SCREEN_WIDTH * 0.42), int(SCREEN_HEIGHT * 0.45) + int(SCREEN_HEIGHT * 0.09), 30, 30)
-                if windowed_rect.collidepoint(mouse_pos):
-                    settings["fullscreen"] = not settings.get("fullscreen", False)
-                    # --- Переход в оконный режим при снятии флажка ---
-                    if settings["fullscreen"]:
-                        screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.FULLSCREEN)
-                    else:
-                        screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.RESIZABLE)
-                level_select_rect = pygame.Rect(int(SCREEN_WIDTH * 0.42), int(SCREEN_HEIGHT * 0.45) + 2 * int(SCREEN_HEIGHT * 0.09), 30, 30)
-                if level_select_rect.collidepoint(mouse_pos):
-                    settings["level_select"] = not settings.get("level_select", False)
+                for slot, rect in slot_rects:
+                    if rect.collidepoint(mouse_pos):
+                        selected_save_slot = slot
+                        break
+                if back_rect and back_rect.collidepoint(mouse_pos):
+                    showing_saves = False
+                    selected_save_slot = None
+                    # Повертаємося у головне меню, якщо не в грі
+                    if not showing_level:
+                        showing_menu = True
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
-                    showing_settings = False
-            elif event.type == pygame.KEYUP:
-                if event.key in pressed_keys:
-                    pressed_keys.discard(event.key)
-        cursor.draw(screen)
+
+                    selected_save_slot = None
+                    showing_saves = False
+                    if not showing_level:
+                        showing_menu = True
+    # --- Game Over Screen ---
+    elif showing_game_over:
+        screen.blit(mainmenu_bg, (0, 0))
+        button_rect = render_game_over(screen, title_font, menu_font)
         pygame.display.flip()
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                if button_rect.collidepoint(event.pos):
+                    # --- Скидаємо стан гри та запускаємо нову гру ---
+                    showing_game_over = False
+                    showing_menu = False
+                    showing_level = True
+                    level_path = LEVELS_DIR / "level0.lvl"
+                    player = None
+                    camera = None
+                    background_grid = None
+                    blocks = []
+                    enemies = []
+                    items = []
+                    statues = []
+                    npcs = []
+                    pressed_keys.clear()
+                    showing_stats = False
+                    is_paused = False
+                    showing_settings = False
+                    showing_saves = False
+                    selected_save_slot = None
+                    level_data = None
+                    player_gems_state = {}
+                    statues_state = {}
+                    break
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_RETURN or event.key == pygame.K_SPACE:
+                    showing_game_over = False
+                    showing_menu = False
+                    showing_level = True
+                    level_path = LEVELS_DIR / "level0.lvl"
+                    player = None
+                    camera = None
+                    background_grid = None
+                    blocks = []
+                    enemies = []
+                    items = []
+                    statues = []
+                    npcs = []
+                    pressed_keys.clear()
+                    showing_stats = False
+                    is_paused = False
+                    showing_settings = False
+                    showing_saves = False
+                    selected_save_slot = None
+                    level_data = None
+                    player_gems_state = {}
+                    statues_state = {}
+                    break
+        continue
+        cursor.draw(screen)
+    pygame.display.flip()
 pygame.quit()
 print("Програма завершена")  # Додано: журнал для перевірки завершення програми
 sys.exit()
