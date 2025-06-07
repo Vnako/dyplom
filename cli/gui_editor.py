@@ -637,7 +637,6 @@ class LevelEditorApp(QWidget):
         super().resizeEvent(event)
 
     def clear_all_cells(self):
-        self.undo_stack.append(self.snapshot_level())
         """Очищає всі клітинки таблиці (ставить пробіл, фон, прибирає іконки)."""
         for row in range(self.level_table.rowCount()):
             for col in range(self.level_table.columnCount()):
@@ -651,7 +650,6 @@ class LevelEditorApp(QWidget):
         self.mark_as_modified()
 
     def clear_selected_cells(self):
-        self.undo_stack.append(self.snapshot_level())
         """Очищає всі виділені клітинки таблиці (ставить пробіл, фон, прибирає іконки)."""
         selected_ranges = self.level_table.selectedRanges()
         for selected_range in selected_ranges:

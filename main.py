@@ -112,7 +112,7 @@ def update_scaled_images():
 
     try:
         settings_menu_buttons = pygame.image.load(str(INTERFACE_DIR / "button.png")).convert_alpha()
-        settings_menu_buttons = pygame.transform.smoothscale(settings_menu_buttons, (int(SCREEN_WIDTH * 0.17), int(SCREEN_HEIGHT * 0.08)))
+        settings_menu_buttons = pygame.transform.smoothscale(settings_menu_buttons, (int(SCREEN_WIDTH * 0.18), int(SCREEN_HEIGHT * 0.08)))
     except pygame.error as e:
         print(f"Помилка завантаження зображення кнопок: {e}")
         sys.exit()
@@ -146,7 +146,7 @@ except pygame.error as e:
     print(f"Помилка завантаження зображення паузи: {e}")
     sys.exit()
 
-pause_menu_rect = pause_menu_image.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2))  # Центрування зображення
+pause_menu_rect = pause_menu_image.get_rect(topleft=(SCREEN_WIDTH * 0.37, SCREEN_HEIGHT * 0.18))  # Центрування зображення
 
 # Розташування кнопок на зображенні паузи
 button_positions = {
@@ -172,7 +172,7 @@ except pygame.error as e:
     print(f"Помилка завантаження зображення меню налаштувань: {e}")
     sys.exit()
 
-settings_menu_rect = settings_menu_image.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2))
+settings_menu_rect = settings_menu_image.get_rect(topleft=(SCREEN_WIDTH * 0.112, SCREEN_HEIGHT * 0.12)) 
 def render_button_text(screen, menu_font, button_name, button_pos, button_image, button_text_mapping):
     """
     Renders button text and blits it onto the screen.
@@ -1343,8 +1343,6 @@ while running:
                     (MENU_X, int(SCREEN_HEIGHT * 0.64)),
                     (MENU_X, int(SCREEN_HEIGHT * 0.76))
                 ]
-                pause_menu_rect = pause_menu_image.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2))
-                settings_menu_rect = settings_menu_image.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2))
                 button_positions = {
                     "continue": (int(SCREEN_WIDTH * 0.39), int(SCREEN_HEIGHT * 0.4)),
                     "saves": (int(SCREEN_WIDTH * 0.39), int(SCREEN_HEIGHT * 0.55)),
@@ -2065,8 +2063,6 @@ while running:
                 SCREEN_WIDTH, SCREEN_HEIGHT = event.w, event.h
                 screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.RESIZABLE)
                 update_scaled_images()
-                pause_menu_rect = pause_menu_image.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2))
-                settings_menu_rect = settings_menu_image.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2))
                 button_positions = {
                     "continue": (int(SCREEN_WIDTH * 0.39), int(SCREEN_HEIGHT * 0.4)),
                     "saves": (int(SCREEN_WIDTH * 0.39), int(SCREEN_HEIGHT * 0.55)),
@@ -2209,8 +2205,6 @@ while running:
                 SCREEN_WIDTH, SCREEN_HEIGHT = event.w, event.h
                 screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.RESIZABLE)
                 update_scaled_images()
-                pause_menu_rect = pause_menu_image.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2))
-                settings_menu_rect = settings_menu_image.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2))
                 button_positions = {
                     "continue": (int(SCREEN_WIDTH * 0.39), int(SCREEN_HEIGHT * 0.4)),
                     "saves": (int(SCREEN_WIDTH * 0.39), int(SCREEN_HEIGHT * 0.55)),
