@@ -148,6 +148,7 @@ def load_textures():
             "gem53": pygame.image.load(str(ITEMS_DIR / "gem53.png")).convert_alpha(),
             "gem54": pygame.image.load(str(ITEMS_DIR / "gem54.png")).convert_alpha(),
             "gem55": pygame.image.load(str(ITEMS_DIR / "gem55.png")).convert_alpha(),
+            "potion": pygame.image.load(str(ITEMS_DIR / "heal_potion.png")).convert_alpha(),
         }
         # Перевірка наявності текстур
         for texture_name, texture_path in [

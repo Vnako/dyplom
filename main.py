@@ -146,7 +146,7 @@ except pygame.error as e:
     print(f"Помилка завантаження зображення паузи: {e}")
     sys.exit()
 
-pause_menu_rect = pause_menu_image.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2))  # Центрування зображення
+pause_menu_rect = pause_menu_image.get_rect(topleft=(SCREEN_WIDTH * 0.37, SCREEN_HEIGHT * 0.18))  # Центрування зображення
 
 # Розташування кнопок на зображенні паузи
 button_positions = {
@@ -764,6 +764,23 @@ pressed_keys = set()
 level_data = None 
 player_gems_state = {}
 statues_state = {}
+player_potions = 0  # <--- Количество зелий лечения у игрока
+
+# --- Загрузка иконки зелья лечения ---
+try:
+    potion_icon = textures["potion"]
+    potion_icon = pygame.transform.smoothscale(potion_icon, (50, 50))
+except pygame.error as e:
+    print(f"Не вдалося завантажити зображення зілля: {e}")
+    potion_icon = None
+
+# --- Показывать иконку и количество зелий, если хотя бы одно зелье есть ---
+def draw_potion_icon_and_count(screen, icon, count, font, x, y):
+    if icon is not None and count > 0:
+        screen.blit(icon, (x, y))
+        pot_text = font.render(f"x{count}", True, (255, 255, 255))
+        pot_text_rect = pot_text.get_rect(midleft=(x + icon.get_width() + 8, y + icon.get_height() // 2))
+        screen.blit(pot_text, pot_text_rect)
 
 def save_player_gems_state(player):
     """Зберігає стан гемів гравця у глобальний словник."""
@@ -1099,6 +1116,16 @@ while running:
                 if hasattr(enemy, "type") and "boss" in enemy.type:
                     enemy.rect.width = 300
                     enemy.rect.height = 300
+            
+            for enemy in enemies:
+                if hasattr(enemy, "type") and "zombie" in enemy.type:
+                    enemy.rect.width = 100
+                    enemy.rect.height = 200
+            
+            for enemy in enemies:
+                if hasattr(enemy, "type") and "skeleton" in enemy.type:
+                    enemy.rect.width = 100
+                    enemy.rect.height = 200
 
             items = [
                 Item(item['x'] * TILE_SIZE, item['y'] * TILE_SIZE, item.get('is_solid', True), textures['item_frames'])
@@ -1265,10 +1292,11 @@ while running:
         health_bar_y = 30
         health_bar_width = 300
         health_bar_height = 32
-        max_health = getattr(player, "max_health", 100)
+        # --- Максимальне здоров'я: статичне, не зменшується від ударів ---
+        if not hasattr(player, "max_health") or player.max_health is None:
+            player.max_health = getattr(player, "health", 100)
+        max_health = player.max_health
         current_health = max(0, getattr(player, "health", 0))
-        if not hasattr(player, "max_health"):
-            max_health = max(current_health, 100)
         health_ratio = min(1.0, current_health / max_health) if max_health > 0 else 0
         # Фон полоски
         pygame.draw.rect(screen, (60, 60, 60), (health_bar_x, health_bar_y, health_bar_width, health_bar_height), border_radius=8)
@@ -1276,12 +1304,20 @@ while running:
         pygame.draw.rect(screen, (200, 40, 40), (health_bar_x, health_bar_y, int(health_bar_width * health_ratio), health_bar_height), border_radius=8)
         # Рамка
         pygame.draw.rect(screen, (255, 255, 255), (health_bar_x, health_bar_y, health_bar_width, health_bar_height), 2, border_radius=8)
-        # Текст в процентах под полоскою
-        percent = int(health_ratio * 100)
-        health_text = menu_font.render(f"Здоров'я: {percent}%", True, (255, 255, 255))
+        # Текст: текуще/максимальное здоров'я (без процентов)
+        health_text = menu_font.render(f"Здоров'я: {current_health}/{max_health}", True, (255, 255, 255))
         health_text_rect = health_text.get_rect()
         health_text_rect.topleft = (health_bar_x, health_bar_y + health_bar_height + 6)
         screen.blit(health_text, health_text_rect)
+
+        # --- Отображение иконки и количества зелий справа от полоски здоровья ---
+        if potion_icon is not None:
+            potion_x = health_bar_x + health_bar_width + 24
+            potion_y = health_bar_y + (health_bar_height - potion_icon.get_height()) // 2
+            screen.blit(potion_icon, (potion_x, potion_y))
+            pot_text = menu_font.render(f"x{player_potions}", True, (255, 255, 255))
+            pot_text_rect = pot_text.get_rect(midleft=(potion_x + potion_icon.get_width() + 8, potion_y + potion_icon.get_height() // 2))
+            screen.blit(pot_text, pot_text_rect)
 
         # --- Додаємо: якщо здоров'я гравця <= 0, показуємо екран "Ви загинули" ---
         if current_health <= 0:
@@ -1294,11 +1330,12 @@ while running:
         # Якщо меню характеристик увімкнено, малюємо його
         if showing_stats:
             screen.blit(pause_menu_image, pause_menu_rect)  # Відображення зображення меню
-            stat_text = settings_font.render("Характеристика", True, (255, 255, 255))  # Білий текст
+            stat_text = settings_font.render("Характеристики", True, (255, 255, 255))  # Білий текст
             stat_text_rect = stat_text.get_rect(center=(SCREEN_WIDTH // 2, int(SCREEN_HEIGHT * 0.24)))
             screen.blit(stat_text, stat_text_rect)
 
-            health_text = menu_font.render(f"Здоров'я: {player.health}", True, (255, 255, 255))
+            # --- Показываем максимальное здоровье из player.max_health ---
+            health_text = menu_font.render(f"Здоров'я: {player.health}/{player.max_health}", True, (255, 255, 255))
             health_text_rect = health_text.get_rect(topleft=(int(SCREEN_WIDTH * 0.4), int(SCREEN_HEIGHT * 0.33)))
             screen.blit(health_text, health_text_rect)
             
@@ -1406,6 +1443,18 @@ while running:
                         debug_state()
                 elif event.key == pygame.K_c:
                     showing_stats = not showing_stats
+                # --- Лечение по кнопке E ---
+                elif event.key == pygame.K_e:
+                    if (
+                        player_potions > 0
+                        and hasattr(player, "health")
+                        and hasattr(player, "max_health")
+                        and player.health < player.max_health
+                    ):
+                        heal_amount = 25
+                        player.health = min(getattr(player, "health", 0) + heal_amount, getattr(player, "max_health", 100))
+                        player_potions -= 1
+                        add_damage_popup(player.rect.centerx, player.rect.top - 20, f"+{heal_amount}", (0, 255, 0))
             elif event.type == pygame.KEYUP:
                 if event.key in pressed_keys:
                     pressed_keys.discard(event.key)
@@ -1499,7 +1548,11 @@ while running:
                             
                         if base.startswith("statue5") and 0 <= num < 5:
                             player.health += 25
-                            print(f"[DEBUG] health збільшено, тепер: {player.health}")
+                            if hasattr(player, "max_health"):
+                                player.max_health += 25
+                            else:
+                                player.max_health = player.health
+                            print(f"[DEBUG] health збільшено, тепер: {player.health}, max_health: {player.max_health}")
                             
                         if base.startswith("statue6") and 0 <= num < 5:
                             player.atk += 10
@@ -1706,21 +1759,25 @@ while running:
                 if current_time - item.clicked_time >= 500:
                     item.current_frame = 2
 
-            # --- Додаємо: якщо current_frame == 2, даємо гравцю випадковий гем ---
-            if item.current_frame == 2 and not hasattr(item, "gem_given"):
-                # Список всіх можливих гемів у гравця
-                gem_names = [f"gem{x}{y}" for x in range(1, 6) for y in range(1, 6)]
-                # Вибираємо випадковий гем
-                random.shuffle(gem_names)
-                for gem in gem_names:
-                    # Якщо такого атрибута немає або він False, даємо його
-                    if hasattr(player, gem) and not getattr(player, gem):
-                        setattr(player, gem, True)
-                        item.gem_given = True  # Позначаємо, що гем вже видано для цього item
-                        break
+            # --- Додаємо: якщо current_frame == 2, даємо гравцю випадковий гем або зілля лікування ---
+            if item.current_frame == 2 and not getattr(item, "reward_given", False):
+                reward_type = random.choice(["gem", "potion"])
+                if reward_type == "gem":
+                    # Список всіх можливих гемів у гравця
+                    gem_names = [f"gem{x}{y}" for x in range(1, 6) for y in range(1, 6)]
+                    random.shuffle(gem_names)
+                    gem_awarded = False
+                    for gem in gem_names:
+                        # Якщо такого атрибута немає або він False, даємо його
+                        if hasattr(player, gem) and not getattr(player, gem):
+                            setattr(player, gem, True)
+                            gem_awarded = True
+                            break
                 else:
-                    # Якщо всі геми вже True, просто позначаємо, щоб не повторювати
-                    item.gem_given = True
+                    # Додаємо зілля лікування
+                    showing_potions = settings.get("showing_potions", True)
+                    player_potions += 1
+                item.reward_given = True  # Позначаємо, що нагорода вже видана для цього item
 
         # --- Оновлення стану гри, якщо не на паузі ---
         if not is_paused and not showing_stats and not showing_settings:
