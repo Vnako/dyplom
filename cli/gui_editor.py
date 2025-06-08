@@ -5,7 +5,7 @@ from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QTableWidget, QT
 from PyQt5.QtGui import QColor, QFont, QIcon, QPixmap, QPainter, QKeySequence
 from PyQt5.QtCore import Qt, QSize, QTimer, QUrl
 from PyQt5.QtGui import QDesktopServices
-from editor_logic import save_edit, update_level_table, fill_with_spaces, save_table_to_file
+from editor_logic import save_edit, fill_with_spaces, save_table_to_file
 
 BASE_DIR = Path(__file__).resolve().parent
 ASSETS_DIR = BASE_DIR / "cli_assets"
