@@ -82,6 +82,9 @@ class LevelEditorApp(QWidget):
         self.level_table = QTableWidget()
         self.level_table.horizontalHeader().setDefaultSectionSize(32)  # Розмір клітинок
         self.level_table.verticalHeader().setDefaultSectionSize(32)
+        # Забороняємо зміну розміру рядків та стовпців вручну
+        self.level_table.horizontalHeader().setSectionResizeMode(QTableWidget.horizontalHeader(self.level_table).Fixed)
+        self.level_table.verticalHeader().setSectionResizeMode(QTableWidget.verticalHeader(self.level_table).Fixed)
         self.level_table.setStyleSheet("""
             QTableWidget {
                 background: transparent;  /* Прозорий фон */
@@ -92,7 +95,7 @@ class LevelEditorApp(QWidget):
                 margin: 0px;
             }
         """)  # Встановлення стилів для таблиці
-        #self.level_table.setEditTriggers(QTableWidget.NoEditTriggers)  # Забороняє редагування таблиці
+        self.level_table.setEditTriggers(QTableWidget.NoEditTriggers)  # Забороняє редагування таблиці
         self.layout.addWidget(self.level_table)
 
         # Додатковий відладковий код
@@ -157,6 +160,15 @@ class LevelEditorApp(QWidget):
 
         # Додаємо гарячу клавішу Backspace для очищення виділеної області
         QShortcut(QKeySequence("Backspace"), self.level_table, activated=self.clear_selected_cells)
+
+        # Додаємо гарячу клавішу Ctrl+A для виділення всіх клітинок
+        QShortcut(QKeySequence("Ctrl+A"), self.level_table, activated=self.select_all_cells)
+        # Додаємо гарячу клавішу Ctrl+C для копіювання виділених клітинок
+        QShortcut(QKeySequence("Ctrl+C"), self.level_table, activated=self.copy_selected_cells)
+        # Додаємо гарячу клавішу Ctrl+V для вставлення клітинок
+        QShortcut(QKeySequence("Ctrl+V"), self.level_table, activated=self.paste_cells)
+        # Додаємо гарячу клавішу Ctrl+X для вирізання виділених клітинок
+        QShortcut(QKeySequence("Ctrl+X"), self.level_table, activated=self.cut_selected_cells)
 
     def init_menu(self):
         # Меню "Файл"
@@ -283,24 +295,26 @@ class LevelEditorApp(QWidget):
                 if file_path.suffix != ".lvl":
                     file_path = file_path.with_suffix(".lvl")
 
-                width = 10
-                height = 10
-
-                # Створення нового рівня
+                # Поля розміру залишаємо порожніми, таблицю очищаємо
                 level_data = {
                     "file_type": "level_json",
                     "level_name": file_path.stem,
-                    "width": width,
-                    "height": height,
-                    "content": [" " * width for _ in range(height)]  # Заповнення пробілами
+                    "width": "",
+                    "height": "",
+                    "content": []
                 }
 
                 with file_path.open('w') as f:
                     json.dump(level_data, f, indent=4)
 
                 self.current_file_path = file_path
+                self.width_input.setText("")
+                self.height_input.setText("")
+                self.level_table.setRowCount(0)
+                self.level_table.setColumnCount(0)
                 self.setWindowTitle(f"Редактор рівнів Slime Quest: Dungeon ({file_path.name})")
-                self.update_level_table()
+                self.is_modified = False
+                self.width_input.setFocus()  # Робимо активним перше поле для вводу
                 QMessageBox.information(self, "Успіх", "Новий файл успішно створено!")
         except Exception as e:
             QMessageBox.critical(self, "Помилка", f"Не вдалося створити новий файл: {e}")
@@ -514,6 +528,9 @@ class LevelEditorApp(QWidget):
 
     def update_table_scale(self):
         new_size = int(32 * self.scale_factor)
+        # Дозволяємо змінювати розмір лише програмно (Ctrl+Wheel або гарячі клавіші)
+        self.level_table.horizontalHeader().setSectionResizeMode(QTableWidget.horizontalHeader(self.level_table).Fixed)
+        self.level_table.verticalHeader().setSectionResizeMode(QTableWidget.verticalHeader(self.level_table).Fixed)
         self.level_table.horizontalHeader().setDefaultSectionSize(new_size)
         self.level_table.verticalHeader().setDefaultSectionSize(new_size)
 
@@ -551,7 +568,7 @@ class LevelEditorApp(QWidget):
         self.dark_theme_action.setChecked(self.current_theme == "dark")
 
     def show_about(self):
-        QMessageBox.information(self, "Про програму", "Це редактор рівнів для 2D ігрового рушія.")
+        QMessageBox.information(self, "Про програму", "Це редактор рівнів для гри Slime Quest: Dungeon. Дипломний проект виконала Коломоєць Вероніка з групи 123-21-1. За всіма питаннями звератись на пошту: veroniqe.kol.556@gmail.com")
 
     def focus_height_input(self):
         self.height_input.setFocus()  # Переходить до поля висоти
@@ -598,31 +615,47 @@ class LevelEditorApp(QWidget):
         menu = QMenu(self)
 
         # Додати дії до контекстного меню
-                
-        add_enemy_menu = menu.addMenu("Додати ворога")
+        paste_cells_action = menu.addAction("Вставити")
+        paste_cells_action.triggered.connect(self.paste_cells)
+        
+        copy_selected_cells_action = menu.addAction("Копіювати")
+        copy_selected_cells_action.triggered.connect(self.copy_selected_cells)
+        
+        cut_selected_cells_action = menu.addAction("Вирізати")
+        cut_selected_cells_action.triggered.connect(self.cut_selected_cells)
+        
+        select_all_cells_action = menu.addAction("Виділити все")
+        select_all_cells_action.triggered.connect(self.select_all_cells)
+
+        # Група "Додати"
+        add_menu = menu.addMenu("Додати")
+
+        # Підгрупа "Додати ворога"
+        add_enemy_menu = add_menu.addMenu("Додати ворога")
         add_enemy_action = QAction("Додати зомбі", self)
-        add_enemy_action.triggered.connect(lambda: self.add_element('1'))  # Наприклад, додаємо ворога 1
+        add_enemy_action.triggered.connect(lambda: self.add_element('1'))  
         add_enemy_menu.addAction(add_enemy_action)
         
         add_enemy_action = QAction("Додати скелета", self)
-        add_enemy_action.triggered.connect(lambda: self.add_element('1'))  # Наприклад, додаємо ворога 1
+        add_enemy_action.triggered.connect(lambda: self.add_element('2'))  
         add_enemy_menu.addAction(add_enemy_action)
         
         add_enemy_action = QAction("Додати боса", self)
-        add_enemy_action.triggered.connect(lambda: self.add_element('1'))  # Наприклад, додаємо ворога 1
+        add_enemy_action.triggered.connect(lambda: self.add_element('3'))  
         add_enemy_menu.addAction(add_enemy_action)
 
+        # Інші додавання
         add_player_action = QAction("Додати гравця", self)
         add_player_action.triggered.connect(lambda: self.add_element('@'))
-        menu.addAction(add_player_action)
+        add_menu.addAction(add_player_action)
         
         add_item_action = QAction("Додати скриню", self)
         add_item_action.triggered.connect(lambda: self.add_element('*'))
-        menu.addAction(add_item_action)
+        add_menu.addAction(add_item_action)
         
         add_wall_action = QAction("Додати стіну", self)
         add_wall_action.triggered.connect(lambda: self.add_element('#'))
-        menu.addAction(add_wall_action)
+        add_menu.addAction(add_wall_action)
 
         clear_cell_action = QAction("Очистити клітинку", self)
         clear_cell_action.triggered.connect(lambda: self.add_element('.'))
@@ -677,6 +710,65 @@ class LevelEditorApp(QWidget):
             QDesktopServices.openUrl(QUrl.fromLocalFile(str(instruction_path.resolve())))
         else:
             QMessageBox.warning(self, "Файл не знайдено", f"Файл {instruction_path} не знайдено.")
+
+    def select_all_cells(self):
+        """Виділяє всі клітинки таблиці."""
+        self.level_table.selectAll()
+
+    def copy_selected_cells(self):
+        """Копіює виділені клітинки у буфер обміну у вигляді тексту."""
+        selected_ranges = self.level_table.selectedRanges()
+        if not selected_ranges:
+            return
+        copied = []
+        for selected_range in selected_ranges:
+            for row in range(selected_range.topRow(), selected_range.bottomRow() + 1):
+                row_data = []
+                for col in range(selected_range.leftColumn(), selected_range.rightColumn() + 1):
+                    item = self.level_table.item(row, col)
+                    row_data.append(item.text() if item else " ")
+                copied.append("\t".join(row_data))
+        clipboard = QApplication.clipboard()
+        clipboard.setText("\n".join(copied))
+
+    def paste_cells(self):
+        """Вставляє дані з буфера обміну у виділену область."""
+        clipboard = QApplication.clipboard()
+        text = clipboard.text()
+        if not text:
+            return
+        rows = text.splitlines()
+        selected_ranges = self.level_table.selectedRanges()
+        if not selected_ranges:
+            return
+        start_row = selected_ranges[0].topRow()
+        start_col = selected_ranges[0].leftColumn()
+        for i, row_data in enumerate(rows):
+            cols = row_data.split("\t")
+            for j, value in enumerate(cols):
+                r = start_row + i
+                c = start_col + j
+                if r < self.level_table.rowCount() and c < self.level_table.columnCount():
+                    item = self.level_table.item(r, c)
+                    if not item:
+                        item = QTableWidgetItem()
+                        self.level_table.setItem(r, c, item)
+                    # Якщо символ є іконкою, додаємо іконку
+                    if value in self.images:
+                        item.setIcon(QIcon(self.images[value].scaled(30, 30, Qt.KeepAspectRatio)))
+                        item.setText(value)
+                        item.setForeground(QColor("#ebfbff"))
+                        item.setBackground(QColor("#ebfbff"))
+                    else:
+                        item.setIcon(QIcon())
+                        item.setText(value)
+                        item.setBackground(QColor("#ebfbff"))
+        self.mark_as_modified()
+
+    def cut_selected_cells(self):
+        """Вирізає виділені клітинки (копіює та очищає їх)."""
+        self.copy_selected_cells()
+        self.clear_selected_cells()
 
 def fill_with_hash(level_table, images):
     """Заповнює всі виділені клітинки таблиці символом #, іконкою icon_wall.png та фоном #080D21."""

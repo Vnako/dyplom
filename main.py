@@ -1163,7 +1163,7 @@ while running:
 
             # --- Patch: Use cave floor for cave levels ---
             level_name = level_path.name
-            if level_name.startswith("level") and level_name != "level0.lvl":
+            if level_name != "level0.lvl":
                 # For cave levels, force cave floor
                 background_grid = generate_background_grid(textures, level_data, "cave")
             else:
@@ -1261,6 +1261,17 @@ while running:
         # --- Малюємо спливаючі повідомлення про шкоду ---
         update_and_draw_damage_popups(screen, camera)
 
+        #if level_name != "level0.lvl":
+        #    dark_overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+        #    dark_overlay.fill((0, 0, 0, 220))
+        #    light_radius = 200
+        #    player_center = camera.apply_rect(player.rect).center
+        #    light_mask = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+        #    pygame.draw.circle(light_mask, (0, 0, 0, 0), player_center, light_radius)
+        #    pygame.draw.circle(light_mask, (0, 0, 0, 220), player_center, light_radius + 30)
+        #    dark_overlay.blit(light_mask, (0, 0), special_flags=pygame.BLEND_RGBA_SUB)
+        #    screen.blit(dark_overlay, (0, 0))
+
         # --- ENEMY DAMAGE TO PLAYER ---
         for enemy in enemies:
             # Получаем позицию врага на экране
@@ -1304,7 +1315,7 @@ while running:
         pygame.draw.rect(screen, (200, 40, 40), (health_bar_x, health_bar_y, int(health_bar_width * health_ratio), health_bar_height), border_radius=8)
         # Рамка
         pygame.draw.rect(screen, (255, 255, 255), (health_bar_x, health_bar_y, health_bar_width, health_bar_height), 2, border_radius=8)
-        # Текст: текуще/максимальное здоров'я (без процентов)
+        # Текст: текуще/максимальне здоров'я (без процентов)
         health_text = menu_font.render(f"Здоров'я: {current_health}/{max_health}", True, (255, 255, 255))
         health_text_rect = health_text.get_rect()
         health_text_rect.topleft = (health_bar_x, health_bar_y + health_bar_height + 6)
@@ -1408,8 +1419,7 @@ while running:
                                 showing_saves = True
                                 is_paused = False
                                 selected_save_slot = None
-                                # Не переключаем showing_level, остаёмся в игре
-                                break
+                                debug_state()
                             elif button_name == "exit":
                                 showing_level = False
                                 showing_menu = True
@@ -1988,8 +1998,7 @@ while running:
                 if event.type == pygame.QUIT:
                     running = False
                 elif ( event.type == pygame.MOUSEBUTTONDOWN 
-                or ( event.type == pygame.MOUSEMOTION and getattr(event, "buttons", (0,))[0] ) 
-                ) and slider_x <= event.pos[0] <= slider_x + slider_width and slider_y - 10 <= event.pos[1] <= slider_y + slider_height + 10:
+                or ( event.type == pygame.MOUSEMOTION and getattr(event, "buttons", (0,))[0] )) and slider_x <= event.pos[0] <= slider_x + slider_width and slider_y - 10 <= event.pos[1] <= slider_y + slider_height + 10:
                     mouse_pos = event.pos
                     # --- Повзунок гучності ---
                     #if (slider_x <= mouse_pos[0] <= slider_x + slider_width and
