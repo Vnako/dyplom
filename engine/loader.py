@@ -337,6 +337,8 @@ def render_background(screen, background_grid, camera):
     :param background_grid: Сітка текстур трави
     :param camera: Камера для зміщення
     """
+    # --- Заливаем экран чёрным перед отрисовкой тайлов ---
+    screen.fill((0, 0, 0))
     for row_index, row in enumerate(background_grid):
         for col_index, texture in enumerate(row):
             x = col_index * TILE_SIZE

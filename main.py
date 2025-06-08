@@ -55,7 +55,88 @@ try:
 except FileNotFoundError as e:
     print(f"Помилка завантаження шрифту: {e}")
     sys.exit()
-    
+
+level_select_shown = False
+just_loaded_save = False
+
+# --- Виправлено: використовуємо всі типи дерев для level0.lvl ---
+def determine_tree_texture_fixed(x, y, blocks_set, textures):
+                left = (x - 1, y) in blocks_set
+                right = (x + 1, y) in blocks_set
+                top = (x, y - 1) in blocks_set
+                bottom = (x, y + 1) in blocks_set
+                if not left and not right and top and bottom: 
+                    return textures["tree"]
+                if left and right and not top and bottom:
+                    return textures["trees_center_top"]
+                if left and right and not top and not bottom:
+                    return textures["trees_center"]
+                if left and right and top and not bottom:
+                    return textures["trees_center_top"]
+                if not left and right and top and bottom:
+                    return textures["trees_center_top"]
+                if left and not right and top and bottom:
+                    return textures["trees_center_top"]
+                if not left and right and top and not bottom:
+                    return textures["trees_center_top"]
+                if left and not right and top and not bottom:
+                    return textures["trees_center_top"]
+                return textures["trees_center"]
+
+# Функція для визначення текстури блоку залежно від оточення
+def determine_block_texture(x, y, blocks_set):
+                """
+                Визначає текстуру блоку залежно від його оточення.
+
+                :param x: Координата X блоку
+                :param y: Координата Y блоку
+                :param blocks_set: Набір координат усіх блоків
+                :return: Відповідна текстура блоку
+                """
+                has_left = (x - 1, y) in blocks_set
+                has_right = (x + 1, y) in blocks_set
+                has_top = (x, y - 1) in blocks_set
+                has_bottom = (x, y + 1) in blocks_set
+
+                # Найбільш специфічні умови
+                if has_left and has_right and has_top and has_bottom:
+                    return textures['wall']
+                if has_left and has_right and has_top:
+                    return textures['wall_bottom']
+                if has_left and has_right and has_bottom:
+                    return textures['wall_top']
+                if has_top and has_bottom and has_left:
+                    return textures['wall_right']
+                if has_top and has_bottom and has_right:
+                    return textures['wall_left']
+
+                # Менш специфічні умови
+                if has_left and has_right:
+                    return textures['wall_top_bottom']
+                if has_top and has_bottom:
+                    return textures['wall_left_right']
+                if has_top and has_left:
+                    return textures['wall_right_bottom']
+                if has_top and has_right:
+                    return textures['wall_left_bottom']
+                if has_bottom and has_left:
+                    return textures['wall_right_top']
+                if has_bottom and has_right:
+                    return textures['wall_left_top']
+
+                # Найменш специфічні умови
+                if has_top:
+                    return textures['wall_left_right_bottom']
+                if has_bottom:
+                    return textures['wall_left_right_top']
+                if has_left:
+                    return textures['wall_right_top_bottom']
+                if has_right:
+                    return textures['wall_left_top_bottom']
+
+                # Якщо немає сусідів
+                return textures['wall_block']
+
 # Завантаження зображення стрілки
 try:
     arrow_image = pygame.image.load(str(INTERFACE_DIR / "arrow.png"))
@@ -453,7 +534,6 @@ def serialize_game_state():
     """Serialize current game state for saving."""
     if player is None or not hasattr(player, "rect"):
         raise RuntimeError("Не можна зберегти гру: гра не запущена або гравець не ініціалізований!")
-    # Завжди зберігайте current level_path як відносний до LEVELS_DIR, якщо це можливо
     try:
         rel_path = level_path.relative_to(LEVELS_DIR)
         level_path_str = str(rel_path)
@@ -461,53 +541,154 @@ def serialize_game_state():
     except ValueError:
         level_path_str = str(level_path.resolve())
         is_relative = False
-    # Зберігайте лише мінімальний стан, не зберігайте блоки/предмети/ворогів/статуї/нпс
+
+    # Сохраняем все геми игрока
+    gem_names = [f"gem{x}{y}" for x in range(1, 6) for y in range(1, 6)]
+    player_gems = {gem: getattr(player, gem, False) for gem in gem_names}
+
+    # Сохраняем состояние статуй
+    statues_state_local = {}
+    if statues:
+        for statue in statues:
+            cell_x = statue.rect.x // TILE_SIZE
+            cell_y = statue.rect.y // TILE_SIZE
+            statues_state_local[f"{cell_x},{cell_y}"] = getattr(statue, "type", "")
+
+    # Сохраняем врагов с их состоянием
+    enemies_state = []
+    for enemy in enemies:
+        enemies_state.append({
+            "x": enemy.rect.x,
+            "y": enemy.rect.y,
+            "type": getattr(enemy, "type", "zombie_left"),
+            "health": getattr(enemy, "health", 1)
+        })
+
+    # Сохраняем характеристики игрока
+    player_stats_state_local = {
+        "health": getattr(player, "health", None),
+        "max_health": getattr(player, "max_health", None),
+        "protection": getattr(player, "protection", None),
+        "atk": getattr(player, "atk", None),
+        "speed": getattr(player, "speed", None),
+        "luck": getattr(player, "luck", None),
+    }
+
+    # Сохраняем все важные переменные
     return {
         "level_path": level_path_str,
         "level_path_relative": is_relative,
         "player": {
             "x": player.rect.x,
             "y": player.rect.y,
-            "health": getattr(player, "health", 10),
-            "protection": getattr(player, "protection", 0),
-            "atk": getattr(player, "atk", 1),
-            "speed": getattr(player, "speed", 1),
-            "luck": getattr(player, "luck", 0),
+            **player_stats_state_local,
+            "potions": player_potions,
+            "gems": player_gems,
         },
         "stats": {
             "showing_stats": showing_stats
         },
-        # --- Нове: розширені ігрові дані ---
+        "statues_state": statues_state_local,
+        "player_stats_state": player_stats_state_local,
+        "player_gems_state": player_gems,
         "completed_levels": list(completed_levels),
+        "enemies_state": enemies_state,
         "defeated_enemies": list(defeated_enemies),
         "opened_chests": list(opened_chests),
         "collected_gems": list(collected_gems),
         "upgraded_statues": list(upgraded_statues),
+        "current_level_number": current_level_number,
+        "boss_defeated_and_portal_used": boss_defeated_and_portal_used,
+        "level_select_shown": level_select_shown,
+        "showing_menu": showing_menu,
+        "showing_level": showing_level,
+        "showing_settings": showing_settings,
+        "showing_saves": showing_saves,
+        "is_paused": is_paused,
+        "selected_save_slot": selected_save_slot,
+        "damage_popups": damage_popups,
+        "player_potions": player_potions,
+        "settings": dict(settings),
     }
 
 def deserialize_game_state(state):
     """Restore game state from loaded data."""
     global level_path, player, camera, background_grid, showing_stats, blocks, enemies, items, statues, npcs
     global completed_levels, defeated_enemies, opened_chests, collected_gems, upgraded_statues
-    # Відновлення level_path з використанням відносної інформації, якщо це можливо
+    global current_level_number, boss_defeated_and_portal_used, level_select_shown
+    global showing_menu, showing_level, showing_settings, showing_saves, is_paused, selected_save_slot
+    global damage_popups, player_potions, settings
+
+    # Восстановление путей
     if state.get("level_path_relative"):
         level_path = (LEVELS_DIR / state["level_path"]).resolve()
     else:
         level_path = Path(state["level_path"])
-    # Завжди повторно аналізуйте файл рівня, щоб отримати нову карту та об'єкти
+
+    # Повторно анализируем файл уровня
     level_data = parse_level_file(level_path)
     player_data = state["player"]
     player = create_player((player_data["x"] // TILE_SIZE, player_data["y"] // TILE_SIZE), textures)
     player.rect.x = player_data["x"]
     player.rect.y = player_data["y"]
     player.health = player_data.get("health", 10)
+    player.max_health = player_data.get("max_health", player.health)
     player.protection = player_data.get("protection", 0)
     player.atk = player_data.get("atk", 1)
     player.speed = player_data.get("speed", 1)
     player.luck = player_data.get("luck", 0)
+    player_potions = player_data.get("potions", state.get("player_potions", 0))
+    # Восстанавливаем геми
+    for gem, value in player_data.get("gems", {}).items():
+        setattr(player, gem, value)
+
     showing_stats = state.get("stats", {}).get("showing_stats", False)
     camera = Camera(level_data['width'] * TILE_SIZE, level_data['height'] * TILE_SIZE)
     background_grid = generate_background_grid(textures, level_data, level_path.name)
+
+    # Восстановление объектов уровня (блоки, враги, предметы, статуи, нпс) как обычно...
+    # ...оставьте этот код как есть...
+
+    # Восстановление расширенных игровых данных
+    completed_levels = set(state.get("completed_levels", []))
+    defeated_enemies = set(tuple(e) for e in state.get("defeated_enemies", []))
+    opened_chests = set(tuple(c) for c in state.get("opened_chests", []))
+    collected_gems = set(tuple(g) for g in state.get("collected_gems", []))
+    upgraded_statues = set(tuple(s) for s in state.get("upgraded_statues", []))
+
+    # Восстановление переменных прогресса и состояния
+    current_level_number = state.get("current_level_number", 1)
+    boss_defeated_and_portal_used = state.get("boss_defeated_and_portal_used", False)
+    level_select_shown = state.get("level_select_shown", False)
+    showing_menu = state.get("showing_menu", False)
+    showing_level = state.get("showing_level", False)
+    showing_settings = state.get("showing_settings", False)
+    showing_saves = state.get("showing_saves", False)
+    is_paused = state.get("is_paused", False)
+    selected_save_slot = state.get("selected_save_slot", None)
+    damage_popups = state.get("damage_popups", [])
+    player_potions = state.get("player_potions", player_potions)
+    # Восстановление настроек
+    if "settings" in state:
+        settings.clear()
+        settings.update(state["settings"])
+
+    # Восстановление состояния статуй
+    statues_state_local = state.get("statues_state", {})
+    for statue in statues:
+        cell_x = statue.rect.x // TILE_SIZE
+        cell_y = statue.rect.y // TILE_SIZE
+        key = f"{cell_x},{cell_y}"
+        if key in statues_state_local:
+            statue.type = statues_state_local[key]
+            if hasattr(statue, "texture") and statue.type in textures:
+                statue.texture = textures[statue.type]
+
+    # Восстановление характеристик игрока (если есть)
+    player_stats_state_local = state.get("player_stats_state", {})
+    for attr in ["health", "max_health", "protection", "atk", "speed", "luck"]:
+        if player_stats_state_local.get(attr) is not None:
+            setattr(player, attr, player_stats_state_local[attr])
     # Відновлення всіх об'єктів з level_data (не з збереження)
     blocks_set = {(block['x'], block['y']) for block in level_data['blocks']}
     blocks = [
@@ -515,10 +696,14 @@ def deserialize_game_state(state):
             block['x'] * TILE_SIZE,
             block['y'] * TILE_SIZE,
             block['is_solid'],
-            determine_tree_texture(block['x'], block['y'], blocks_set, textures) if level_path.name == "level0.lvl" else determine_block_texture(block['x'], block['y'], blocks_set)
+            determine_tree_texture_fixed(block['x'], block['y'], blocks_set, textures) if level_path.name == "level0.lvl" else determine_block_texture(block['x'], block['y'], blocks_set)
         )
         for block in level_data['blocks']
     ]
+    # Восстановление defeated_enemies
+    defeated_enemies = set(tuple(e) for e in state.get("defeated_enemies", []))
+    # Восстановление врагов
+    enemies_state = state.get("enemies_state", [])
     enemy_textures = {
         "zombie_left": textures["zombie_left"],
         "zombie_right": textures["zombie_right"],
@@ -533,16 +718,33 @@ def deserialize_game_state(state):
         "boss_back_left": textures["boss_back_left"],
         "boss_back_right": textures["boss_back_right"],
     }
-    enemies = [
-        Enemy(
-            enemy['x'], enemy['y'], enemy_type_mapping.get(enemy['type'], 'zombie_left'), enemy_textures,
-            health={
-                'zombie': 50,
-                'skeleton': 100,
-                'boss': 10
-            }.get(enemy_type_mapping.get(enemy['type'], 'zombie_left'), 1)
-        ) for enemy in level_data['enemies']
-    ]
+    enemies = []
+    if enemies_state:
+        for enemy_data in enemies_state:
+        #    enemy_id = (enemy_data["x"], enemy_data["y"], enemy_data["type"])
+        #    if enemy_id in defeated_enemies:
+        #        continue  # Не восстанавливаем убитых врагов
+            enemy = Enemy(
+                enemy_data["x"], enemy_data["y"],
+                enemy_data.get("type", "zombie_left"),
+                enemy_textures,
+                health=enemy_data.get("health", 1)
+            )
+            enemies.append(enemy)
+        print(f"[DEBUG] Loaded {len(enemies)} enemies from save")
+    else:
+        # Если enemies_state пустой (старое сохранение или новая игра) — создаём врагов из level_data
+        enemies = [
+            Enemy(
+                enemy['x'], enemy['y'], enemy_type_mapping.get(enemy['type'], 'zombie_left'), enemy_textures,
+                health={
+                    'zombie': 50,
+                    'skeleton': 75,
+                    'boss': 10
+                }.get(enemy_type_mapping.get(enemy['type'], 'zombie_left'), 1)
+            ) for enemy in level_data['enemies']
+        ]
+        print(f"[DEBUG] Loaded {len(enemies)} enemies from level_data")
     # --- Увеличиваем хитбокс босса до 300x300 ---
     for enemy in enemies:
         if hasattr(enemy, "type") and "boss" in enemy.type:
@@ -559,7 +761,7 @@ def deserialize_game_state(state):
             statue['x'] * TILE_SIZE,
             statue['y'] * TILE_SIZE,
             statue.get('is_solid', True),
-            f"statue{statue['type']}",
+            f"statue{statue['type']}0",
             textures
         )
         for statue in level_data['statues']
@@ -632,11 +834,23 @@ def get_save_datetime(slot):
 
 def load_game(slot=1):
     """Load game state from a save slot and restore it."""
+    global player, blocks, enemies, items, statues, npcs, camera, background_grid, level_data
     save_path = get_save_path(slot)
     if not os.path.exists(save_path):
         print(f"Save slot {slot} is empty.")
         return False
     try:
+        # --- Сброс всех игровых объектов перед загрузкой ---
+        player = None
+        blocks = []
+        enemies = []
+        items = []
+        statues = []
+        npcs = []
+        camera = None
+        background_grid = None
+        level_data = None
+        # --- Загружаем сохранение ---
         with open(save_path, "r", encoding="utf-8") as f:
             state = json.load(f)
             deserialize_game_state(state)
@@ -697,18 +911,16 @@ def render_saves_menu(screen, menu_font, setings_menu_image, pause_menu_buttons,
     # Bottom buttons: only if slot selected
     save_rect = load_rect = back_rect = None
     bottom_y = wide_y + wide_height - btn_h - 24
-    # --- Only show "Save" button if in-game (showing_level == True) ---
-    if selected_slot is not None:
-        btn_x = wide_x + int(wide_width * 0.18)
-        if globals().get("showing_level", False) and globals().get("player", None) is not None:
-            # Save
-            save_btn_pos = (btn_x, bottom_y)
-            screen.blit(pause_menu_buttons, save_btn_pos)
-            save_text = menu_font.render("Зберегти", True, (255, 255, 255))
-            save_text_rect = save_text.get_rect(center=(save_btn_pos[0] + btn_w // 2, save_btn_pos[1] + btn_h // 2))
-            screen.blit(save_text, save_text_rect)
-            save_rect = pygame.Rect(save_btn_pos, (btn_w, btn_h))
-            btn_x += int(wide_width * 0.24)
+    btn_x = wide_x + int(wide_width * 0.18)  # <-- ИНИЦИАЛИЗАЦИЯ btn_x по умолчанию
+    is_cave = "cave" in str(level_path).lower() or (level_path.name.startswith("level") and level_path.name != "level0.lvl")
+    if selected_slot is not None and globals().get("showing_level", False) and not is_cave:
+        save_btn_pos = (btn_x, bottom_y)
+        screen.blit(pause_menu_buttons, save_btn_pos)
+        save_text = menu_font.render("Зберегти", True, (255, 255, 255))
+        save_text_rect = save_text.get_rect(center=(save_btn_pos[0] + btn_w // 2, save_btn_pos[1] + btn_h // 2))
+        screen.blit(save_text, save_text_rect)
+        save_rect = pygame.Rect(save_btn_pos, (btn_w, btn_h))
+        btn_x += int(wide_width * 0.24)
     # Load (only if slot has save)
     if selected_slot is not None and slot_has_save.get(selected_slot, False):
         load_btn_pos = (btn_x, bottom_y)
@@ -831,7 +1043,7 @@ def restore_statues_state(statues):
             if hasattr(statue, "texture") and statue.type in textures:
                 statue.texture = textures[statue.type]
     # Відновлюємо характеристики гравця, якщо вони збережені
-    if "player_stats_state" in globals() and player_stats_state:
+    if player is not None and "player_stats_state" in globals() and player_stats_state:
         for attr in ["health", "protection", "atk", "speed", "luck"]:
             if player_stats_state.get(attr) is not None:
                 setattr(player, attr, player_stats_state[attr])
@@ -897,6 +1109,7 @@ def update_and_draw_damage_popups(screen, camera):
 
 while running:
     clock.tick(60)
+    events = pygame.event.get()
     global rotating_image, rotating_image_rect, rotation_angle
 
     if showing_menu:
@@ -964,7 +1177,7 @@ while running:
         pygame.display.flip()
 
         # Обробка подій
-        for event in pygame.event.get():
+        for event in events:
             if event.type == pygame.QUIT:
                 running = False
             elif event.type == pygame.MOUSEBUTTONDOWN:
@@ -980,6 +1193,7 @@ while running:
                                 showing_level = True
                                 # Reset all game state for a new game
                                 level_path = LEVELS_DIR / "level0.lvl"
+                                level_data = parse_level_file(level_path)  # <--- ДОБАВИТЬ ЭТУ СТРОКУ
                                 player = None
                                 camera = None
                                 background_grid = None
@@ -994,9 +1208,9 @@ while running:
                                 showing_settings = False
                                 showing_saves = False
                                 selected_save_slot = None
-                                level_data = None
                                 boss_defeated_and_portal_used = False  # <--- Reset flag on new game
                                 current_level_number = 1  # Reset level cycle
+                                level_select_shown = False  # <--- Reset level select flag on new game
                                 debug_state()
                                 break
                             elif text == "Збереження":
@@ -1016,6 +1230,7 @@ while running:
                                 showing_stats = False
                                 is_paused = False
                                 level_data = None
+                                level_select_shown = False  # <--- Reset on return to saves
                                 # Важно: сразу делаем continue, чтобы цикл while не дошёл до блока showing_level!
                                 continue
                             elif text == "Налаштування":
@@ -1040,77 +1255,54 @@ while running:
         # Якщо ми тут, значить showing_level == True
         # Відображення рівня
         if player is None or camera is None or background_grid is None:
-            print("Ініціалізація рівня")
-            level_data = parse_level_file(level_path)
-
-            if level_data['player_start'] is None:
-                print("Помилка: Початкова позиція гравця не визначена у файлі рівня.")
-                running = False
-                break
-
-            player = create_player(level_data['player_start'], textures)
-            # --- Відновлюємо стан гемів після створення гравця ---
-            restore_player_gems_state(player)
-            
-            blocks_set = {(block['x'], block['y']) for block in level_data['blocks']}
-            # --- Виправлено: використовуємо всі типи дерев для level0.lvl ---
-            def determine_tree_texture_fixed(x, y, blocks_set, textures):
-                left = (x - 1, y) in blocks_set
-                right = (x + 1, y) in blocks_set
-                top = (x, y - 1) in blocks_set
-                bottom = (x, y + 1) in blocks_set
-                if not left and not right and top and bottom: 
-                    return textures["tree"]
-                if left and right and not top and bottom:
-                    return textures["trees_center_top"]
-                if left and right and not top and not bottom:
-                    return textures["trees_center"]
-                if left and right and top and not bottom:
-                    return textures["trees_center_top"]
-                if not left and right and top and bottom:
-                    return textures["trees_center_top"]
-                if left and not right and top and bottom:
-                    return textures["trees_center_top"]
-                if not left and right and top and not bottom:
-                    return textures["trees_center_top"]
-                if left and not right and top and not bottom:
-                    return textures["trees_center_top"]
-                return textures["trees_center"]
-
-            blocks = [
-                Block(
-                    block['x'] * TILE_SIZE,
-                    block['y'] * TILE_SIZE,
-                    block['is_solid'],
-                    determine_tree_texture_fixed(block['x'], block['y'], blocks_set, textures) if level_path.name == "level0.lvl" else determine_block_texture(block['x'], block['y'], blocks_set)
-                )
-                for block in level_data['blocks']
-            ]
-
-            enemy_textures = {
-                "zombie_left": textures["zombie_left"],
-                "zombie_right": textures["zombie_right"],
-                "zombie_back_left": textures["zombie_back_left"],
-                "zombie_back_right": textures["zombie_back_right"],
-                "skeleton_left": textures["skeleton_left"],
-                "skeleton_right": textures["skeleton_right"],
-                "skeleton_back_left": textures["skeleton_back_left"],
-                "skeleton_back_right": textures["skeleton_back_right"],
-                "boss_left": textures["boss_left"],
-                "boss_right": textures["boss_right"],
-                "boss_back_left": textures["boss_back_left"],
-                "boss_back_right": textures["boss_back_right"],
-            }
-            enemies = [
-                Enemy(
-                    enemy['x'], enemy['y'], enemy_type_mapping.get(enemy['type'], 'zombie_left'), enemy_textures,
-                    health={
-                        'zombie': 50,
-                        'skeleton': 100,
-                        'boss': 10
-                    }.get(enemy_type_mapping.get(enemy['type'], 'zombie_left'), 1)
-                ) for enemy in level_data['enemies']
-            ]
+            if just_loaded_save:
+                just_loaded_save = False
+                # --- ВАЖЛИВО: після завантаження збереження всі об'єкти вже відновлені функцією deserialize_game_state ---
+                # Тому нічого не створюємо тут, просто переходимо далі!
+            else:
+                print("Ініціалізація рівня")
+                level_data = parse_level_file(level_path)
+                if level_data['player_start'] is None:
+                    print("Помилка: Початкова позиція гравця не визначена у файлі рівня.")
+                    running = False
+                    break
+                player = create_player(level_data['player_start'], textures)
+                # --- Відновлюємо стан гемів після створення гравця ---
+                restore_player_gems_state(player)
+                blocks_set = {(block['x'], block['y']) for block in level_data['blocks']}
+                blocks = [
+                    Block(
+                        block['x'] * TILE_SIZE,
+                        block['y'] * TILE_SIZE,
+                        block['is_solid'],
+                        determine_tree_texture_fixed(block['x'], block['y'], blocks_set, textures) if level_path.name == "level0.lvl" else determine_block_texture(block['x'], block['y'], blocks_set)
+                    )
+                    for block in level_data['blocks']
+                ]
+                enemy_textures = {
+                    "zombie_left": textures["zombie_left"],
+                    "zombie_right": textures["zombie_right"],
+                    "zombie_back_left": textures["zombie_back_left"],
+                    "zombie_back_right": textures["zombie_back_right"],
+                    "skeleton_left": textures["skeleton_left"],
+                    "skeleton_right": textures["skeleton_right"],
+                    "skeleton_back_left": textures["skeleton_back_left"],
+                    "skeleton_back_right": textures["skeleton_back_right"],
+                    "boss_left": textures["boss_left"],
+                    "boss_right": textures["boss_right"],
+                    "boss_back_left": textures["boss_back_left"],
+                    "boss_back_right": textures["boss_back_right"],
+                }
+                enemies = [
+                    Enemy(
+                        enemy['x'], enemy['y'], enemy_type_mapping.get(enemy['type'], 'zombie_left'), enemy_textures,
+                        health={
+                            'zombie': 50,
+                            'skeleton': 75,
+                            'boss': 10
+                        }.get(enemy_type_mapping.get(enemy['type'], 'zombie_left'), 1)
+                    ) for enemy in level_data['enemies']
+                ]
             # --- Увеличиваем хитбокс босса до 300x300 ---
             for enemy in enemies:
                 if hasattr(enemy, "type") and "boss" in enemy.type:
@@ -1169,60 +1361,6 @@ while running:
             else:
                 background_grid = generate_background_grid(textures, level_data, level_name)
 
-            # Функція для визначення текстури блоку залежно від оточення
-            def determine_block_texture(x, y, blocks_set):
-                """
-                Визначає текстуру блоку залежно від його оточення.
-
-                :param x: Координата X блоку
-                :param y: Координата Y блоку
-                :param blocks_set: Набір координат усіх блоків
-                :return: Відповідна текстура блоку
-                """
-                has_left = (x - 1, y) in blocks_set
-                has_right = (x + 1, y) in blocks_set
-                has_top = (x, y - 1) in blocks_set
-                has_bottom = (x, y + 1) in blocks_set
-
-                # Найбільш специфічні умови
-                if has_left and has_right and has_top and has_bottom:
-                    return textures['wall']
-                if has_left and has_right and has_top:
-                    return textures['wall_bottom']
-                if has_left and has_right and has_bottom:
-                    return textures['wall_top']
-                if has_top and has_bottom and has_left:
-                    return textures['wall_right']
-                if has_top and has_bottom and has_right:
-                    return textures['wall_left']
-
-                # Менш специфічні умови
-                if has_left and has_right:
-                    return textures['wall_top_bottom']
-                if has_top and has_bottom:
-                    return textures['wall_left_right']
-                if has_top and has_left:
-                    return textures['wall_right_bottom']
-                if has_top and has_right:
-                    return textures['wall_left_bottom']
-                if has_bottom and has_left:
-                    return textures['wall_right_top']
-                if has_bottom and has_right:
-                    return textures['wall_left_top']
-
-                # Найменш специфічні умови
-                if has_top:
-                    return textures['wall_left_right_bottom']
-                if has_bottom:
-                    return textures['wall_left_right_top']
-                if has_left:
-                    return textures['wall_right_top_bottom']
-                if has_right:
-                    return textures['wall_left_top_bottom']
-
-                # Якщо немає сусідів
-                return textures['wall_block']
-
         render_background(screen, background_grid, camera)
 
         # Упорядкування об'єктів для малювання за координатою `y`
@@ -1237,7 +1375,8 @@ while running:
             render_objects.append((statue.rect.bottom, statue))  # Використовуємо нижню координату статуї
 
         # Додаємо гравця
-        render_objects.append((player.rect.bottom, player))  # Використовуємо нижню координату гравця
+        if player is not None:
+            render_objects.append((player.rect.bottom, player))  # Використовуємо нижню координату гравця
 
         # Додаємо інші об'єкти (предмети, вороги, NPC)
         for item in items:
@@ -1293,22 +1432,23 @@ while running:
         health_bar_width = 300
         health_bar_height = 32
         # --- Максимальне здоров'я: статичне, не зменшується від ударів ---
-        if not hasattr(player, "max_health") or player.max_health is None:
-            player.max_health = getattr(player, "health", 100)
-        max_health = player.max_health
-        current_health = max(0, getattr(player, "health", 0))
-        health_ratio = min(1.0, current_health / max_health) if max_health > 0 else 0
-        # Фон полоски
-        pygame.draw.rect(screen, (60, 60, 60), (health_bar_x, health_bar_y, health_bar_width, health_bar_height), border_radius=8)
-        # Заповнена частина
-        pygame.draw.rect(screen, (200, 40, 40), (health_bar_x, health_bar_y, int(health_bar_width * health_ratio), health_bar_height), border_radius=8)
-        # Рамка
-        pygame.draw.rect(screen, (255, 255, 255), (health_bar_x, health_bar_y, health_bar_width, health_bar_height), 2, border_radius=8)
-        # Текст: текуще/максимальное здоров'я (без процентов)
-        health_text = menu_font.render(f"Здоров'я: {current_health}/{max_health}", True, (255, 255, 255))
-        health_text_rect = health_text.get_rect()
-        health_text_rect.topleft = (health_bar_x, health_bar_y + health_bar_height + 6)
-        screen.blit(health_text, health_text_rect)
+        if player is not None:
+            if not hasattr(player, "max_health") or player.max_health is None:
+                player.max_health = getattr(player, "health", 100)
+            max_health = player.max_health
+            current_health = max(0, getattr(player, "health", 0))
+            health_ratio = min(1.0, current_health / max_health) if max_health > 0 else 0
+            # Фон полоски
+            pygame.draw.rect(screen, (60, 60, 60), (health_bar_x, health_bar_y, health_bar_width, health_bar_height), border_radius=8)
+            # Заповнена частина
+            pygame.draw.rect(screen, (200, 40, 40), (health_bar_x, health_bar_y, int(health_bar_width * health_ratio), health_bar_height), border_radius=8)
+            # Рамка
+            pygame.draw.rect(screen, (255, 255, 255), (health_bar_x, health_bar_y, health_bar_width, health_bar_height), 2, border_radius=8)
+            # Текст: текуще/максимальне здоров'я (без процентов)
+            health_text = menu_font.render(f"Здоров'я: {current_health}/{max_health}", True, (255, 255, 255))
+            health_text_rect = health_text.get_rect()
+            health_text_rect.topleft = (health_bar_x, health_bar_y + health_bar_height + 6)
+            screen.blit(health_text, health_text_rect)
 
         # --- Отображение иконки и количества зелий справа от полоски здоровья ---
         if potion_icon is not None:
@@ -1356,7 +1496,7 @@ while running:
             screen.blit(luck_text, luck_text_rect)
  
         # --- Обробка подій рівня ---
-        for event in pygame.event.get():
+        for event in events:
             if event.type == pygame.QUIT:
 
                 running = False
@@ -1408,8 +1548,7 @@ while running:
                                 showing_saves = True
                                 is_paused = False
                                 selected_save_slot = None
-                                # Не переключаем showing_level, остаёмся в игре
-                                break
+                                debug_state()
                             elif button_name == "exit":
                                 showing_level = False
                                 showing_menu = True
@@ -1456,16 +1595,16 @@ while running:
             elif event.type == pygame.KEYUP:
                 if event.key in pressed_keys:
                     pressed_keys.discard(event.key)
-            elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 3:  # ПКМ
+            elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:  # ЛКМ
                 mouse_pos = event.pos
-                print(f"[DEBUG] ПКМ координати кліку: {mouse_pos}")
+                print(f"[DEBUG] ЛКМ координати кліку: {mouse_pos}")
                 clicked_any_statue = False
                 for statue in statues:
                     statue_screen_rect = camera.apply_rect(statue.rect)
                     print(f"[DEBUG] Перевірка статуї {statue.type} rect={statue_screen_rect}")
                     if statue_screen_rect.collidepoint(mouse_pos):
                         clicked_any_statue = True
-                        print(f"[DEBUG] ПКМ по статуї: {statue.type} at {statue_screen_rect.topleft}")
+                        print(f"[DEBUG] ЛКМ по статуї: {statue.type} at {statue_screen_rect.topleft}")
                         # Виправлено: базова частина типу статуї (наприклад, 'statue40')
                         if len(statue.type) >= 7:
                             base = statue.type[:7]  # 'statue40', 'statue41', ...
@@ -1480,7 +1619,7 @@ while running:
                         if num == 5:
                             print(f"[DEBUG] Досягнуто останньої текстури {statue.type}, подальше оновлення заблоковано.")
                             break  # Не оновлюємо більше текстуру
-
+                
                         # --- Додаємо приховування гемів при кліках по statueXX ---
                         # Для кожної статуї, приховуємо відповідний гем
                         statue_gem_map = {
@@ -1580,45 +1719,40 @@ while running:
                             print(f"[DEBUG] Текстура {new_type} не знайдена в textures")
                         break
                     save_statues_state(statues)  # Зберігаємо стан статуй після кожного кліку
+                
                 if not clicked_any_statue:
-                    print(f"[DEBUG] ПКМ не по жодній статуї. Координати кліку: {mouse_pos}")
-            elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:  # ЛКМ
-                mouse_pos = event.pos
-                for item in items:
-                    item_screen_rect = camera.apply_rect(item.rect)
-                    # Отримуємо поточний час
-                    current_time = pygame.time.get_ticks()
-                    # --- Нове: Проверяем дистанцию и отсутствие стены между игроком и сундуком ---
-                    # Проверяем, что курсор на сундуке
-                    if item_screen_rect.collidepoint(mouse_pos) and getattr(item, "current_frame", 0) == 0:
-                        # Проверяем дистанцию между игроком и сундуком (по центрам)
-                        player_center = player.rect.center
-                        item_center = item.rect.center
-                        dx = player_center[0] - item_center[0]
-                        dy = player_center[1] - item_center[1]
-                        distance = (dx ** 2 + dy ** 2) ** 0.5
-                        max_distance = 120  # Можно настроить
-                        if distance > max_distance:
-                            print("[DEBUG] Сундук слишком далеко для открытия.")
-                            continue
-                        # Проверяем прямую видимость (нет стены между игроком и сундуком)
-                        def has_line_of_sight(start, end, blocks):
-                            # Брезенхем по прямой между start и end, проверяем пересечение с solid блоками
-                            steps = int(max(abs(end[0] - start[0]), abs(end[1] - start[1])) // 10) + 1
-                            for i in range(1, steps):
-                                x = int(start[0] + (end[0] - start[0]) * i / steps)
-                                y = int(start[1] + (end[1] - start[1]) * i / steps)
-                                point_rect = pygame.Rect(x, y, 4, 4)
-                                for block in blocks:
-                                    if block.is_solid and block.rect.colliderect(point_rect):
-                                        return False
-                            return True
-                        if not has_line_of_sight(player_center, item_center, blocks):
-                            print("[DEBUG] Между игроком и сундуком есть стена!")
-                            continue
-                        # --- Якщо все умови виконані, відкриваємо сундук ---
-                        item.current_frame = 1
-                        item.clicked_time = pygame.time.get_ticks()
+                    for item in items:
+                        item_screen_rect = camera.apply_rect(item.rect)
+                        if item_screen_rect.collidepoint(mouse_pos) and getattr(item, "current_frame", 0) == 0:
+                            print(f"[DEBUG] Клик по сундуку: {item.rect.topleft}")
+                            player_center = player.rect.center
+                            item_center = item.rect.center
+                            dx = player_center[0] - item_center[0]
+                            dy = player_center[1] - item_center[1]
+                            distance = (dx ** 2 + dy ** 2) ** 0.5
+                            print(f"[DEBUG] Дистанция до сундука: {distance}")
+                            max_distance = 200  # Увеличьте для теста
+                            if distance > max_distance:
+                                print("[DEBUG] Сундук слишком далеко для открытия.")
+                                continue
+                            # Проверяем прямую видимость (нет стены между игроком и сундуком)
+                            def has_line_of_sight(start, end, blocks):
+                                steps = int(max(abs(end[0] - start[0]), abs(end[1] - start[1])) // 10) + 1
+                                for i in range(1, steps):
+                                    x = int(start[0] + (end[0] - start[0]) * i / steps)
+                                    y = int(start[1] + (end[1] - start[1]) * i / steps)
+                                    point_rect = pygame.Rect(x, y, 4, 4)
+                                    for block in blocks:
+                                        if block.is_solid and block.rect.colliderect(point_rect):
+                                            return False
+                                return True
+                            if not has_line_of_sight(player_center, item_center, blocks):
+                                print("[DEBUG] Между игроком и сундуком есть стена!")
+                                continue
+                            # --- Если все условия выполнены, открываем сундук ---
+                            item.current_frame = 1
+                            item.clicked_time = pygame.time.get_ticks()
+
         if is_paused:
             render_pause_menu(screen, pause_menu_image, pause_menu_buttons, button_positions, title_font, menu_font)
             if event.type == pygame.MOUSEBUTTONDOWN:
@@ -1655,7 +1789,7 @@ while running:
             slider_y = int(SCREEN_HEIGHT * 0.36)
             slider_width = int(SCREEN_WIDTH * 0.22)
             slider_height = 10
-            for event in pygame.event.get():
+            for event in events:
                 if event.type == pygame.QUIT:
                     running = False
                 elif ( event.type == pygame.MOUSEBUTTONDOWN or ( event.type == pygame.MOUSEMOTION and getattr(event, "buttons", (0,))[0] )) and slider_x <= event.pos[0] <= slider_x + slider_width and slider_y - 10 <= event.pos[1] <= slider_y + slider_height + 10:
@@ -1731,7 +1865,7 @@ while running:
             slot_rects, save_rect, load_rect, back_rect = render_saves_menu(screen, menu_font, pause_menu_image, pause_menu_buttons, SAVE_SLOTS, selected_save_slot)
             cursor.draw(screen)
             pygame.display.flip()
-            for event in pygame.event.get():
+            for event in events:
                 if event.type == pygame.QUIT:
                     running = False
                 elif event.type == pygame.MOUSEBUTTONDOWN:
@@ -1745,6 +1879,28 @@ while running:
                         is_paused = True
                         selected_save_slot = None
                         break
+                    if save_rect and save_rect.collidepoint(mouse_pos):
+                        if selected_save_slot is not None and showing_level and player is not None:
+                            save_game(selected_save_slot)
+                    if load_rect and load_rect.collidepoint(mouse_pos):
+                        if selected_save_slot is not None:
+                            player = None
+                            camera = None
+                            background_grid = None
+                            blocks = []
+                            enemies = []
+                            items = []
+                            statues = []
+                            npcs = []
+                            level_data = None
+                            if load_game(selected_save_slot):
+                                just_loaded_save = True
+                                showing_saves = False
+                                is_paused = False
+                                showing_level = True
+                                showing_menu = False
+                                showing_settings = False
+                                selected_save_slot = None
                 elif event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_ESCAPE:
                         selected_save_slot = None
@@ -1757,9 +1913,9 @@ while running:
                 if current_time - item.clicked_time >= 500:
                     item.current_frame = 2
 
-            # --- Додаємо: якщо current_frame == 2, даємо гравцю випадковий гем або зілля лікування ---
+             # --- Додаємо: якщо current_frame == 2, даємо гравцю випадковий гем або зілля лікування ---
             if item.current_frame == 2 and not getattr(item, "reward_given", False):
-                reward_type = random.choice(["gem", "potion"])
+                reward_type = random.choices(["gem", "potion"], weights=[0.7, 0.3])[0]
                 if reward_type == "gem":
                     # Список всіх можливих гемів у гравця
                     gem_names = [f"gem{x}{y}" for x in range(1, 6) for y in range(1, 6)]
@@ -1779,112 +1935,120 @@ while running:
 
         # --- Оновлення стану гри, якщо не на паузі ---
         if not is_paused and not showing_stats and not showing_settings:
-            for enemy in enemies:
-                initial_position = enemy.rect.topleft
-                distance_to_player = ((enemy.rect.centerx - player.rect.centerx) ** 2 +
-                                      (enemy.rect.centery - player.rect.centery) ** 2) ** 0.5
-                if distance_to_player <= 600:
-                    path_blocked = False
-                    if enemy.rect.x != player.rect.x:
-                        step = 1 if enemy.rect.x < player.rect.x else -1
-                        for x in range(enemy.rect.x, player.rect.x, step * TILE_SIZE):
-                            if any(block.is_solid and block.rect.collidepoint(x, enemy.rect.centery) for block in blocks):
-                                path_blocked = True
-                                break
-                    if enemy.rect.y != player.rect.y and not path_blocked:
-                        step = 1 if enemy.rect.y < player.rect.y else -1
-                        for y in range(enemy.rect.y, player.rect.y, step * TILE_SIZE):
-                            if any(block.is_solid and block.rect.collidepoint(enemy.rect.centerx, y) for block in blocks):
-                                path_blocked = True
-                                break
-                    if not path_blocked:
-                        enemy.move_towards_player(player.rect, blocks)
-                        enemy.rect.x += enemy.dx
-                        for block in blocks:
-                                if block.is_solid and enemy.rect.colliderect(block.rect):
+            if player is not None:    
+                for enemy in enemies:
+                    initial_position = enemy.rect.topleft
+                    distance_to_player = ((enemy.rect.centerx - player.rect.centerx) ** 2 +
+                                        (enemy.rect.centery - player.rect.centery) ** 2) ** 0.5
+                    if distance_to_player <= 600:
+                        path_blocked = False
+                        if enemy.rect.x != player.rect.x:
+                            step = 1 if enemy.rect.x < player.rect.x else -1
+                            for x in range(enemy.rect.x, player.rect.x, step * TILE_SIZE):
+                                if any(block.is_solid and block.rect.collidepoint(x, enemy.rect.centery) for block in blocks):
+                                    path_blocked = True
+                                    break
+                        if enemy.rect.y != player.rect.y and not path_blocked:
+                            step = 1 if enemy.rect.y < player.rect.y else -1
+                            for y in range(enemy.rect.y, player.rect.y, step * TILE_SIZE):
+                                if any(block.is_solid and block.rect.collidepoint(enemy.rect.centerx, y) for block in blocks):
+                                    path_blocked = True
+                                    break
+                        if not path_blocked:
+                            enemy.move_towards_player(player.rect, blocks)
+                            enemy.rect.x += enemy.dx
+                            for block in blocks:
+                                    if block.is_solid and enemy.rect.colliderect(block.rect):
+                                        enemy.rect.x = initial_position[0]
+                                    break
+                            for statue in statues:
+                                if statue.is_solid and enemy.rect.colliderect(statue.rect):
                                     enemy.rect.x = initial_position[0]
-                                break
+                                    break
+                            enemy.rect.y += enemy.dy
+                            for block in blocks:
+                                if block.is_solid and enemy.rect.colliderect(block.rect):
+                                    enemy.rect.y = initial_position[1]
+                                    break
+                            for statue in statues:
+                                if statue.is_solid and enemy.rect.colliderect(statue.rect):
+                                    enemy.rect.y = initial_position[1]
+                                    break
                         for statue in statues:
                             if statue.is_solid and enemy.rect.colliderect(statue.rect):
-                                enemy.rect.x = initial_position[0]
+                                enemy.rect.topleft = initial_position
                                 break
-                        enemy.rect.y += enemy.dy
-                        for block in blocks:
-                            if block.is_solid and enemy.rect.colliderect(block.rect):
-                                enemy.rect.y = initial_position[1]
-                                break
-                        for statue in statues:
-                            if statue.is_solid and enemy.rect.colliderect(statue.rect):
-                                enemy.rect.y = initial_position[1]
-                                break
-                    for statue in statues:
-                        if statue.is_solid and enemy.rect.colliderect(statue.rect):
-                            enemy.rect.topleft = initial_position
-                            break
-                    # --- ВРАГИ НАНОСЯТ УРОН ---
-                    if player.rect.colliderect(enemy.rect):
-                        enemy.dx = 0
-                        enemy.dy = 0
-                        # Добавляем урон врага игроку
-                        if not hasattr(enemy, "attack_cooldown"):
-                            enemy.attack_cooldown = 0
-                        if enemy.attack_cooldown <= 0:
-                            damage = getattr(enemy, "damage", 5)  # По умолчанию 5 урона
-                            effective_damage = max(1, int(damage * (1 - getattr(player, "protection", 0) / 100)))
-                            player.health -= effective_damage
-                            # --- Add damage popup for player ---
-                            add_damage_popup(player.rect.centerx, player.rect.top, f"-{effective_damage}", (255, 0, 0))
-                            enemy.attack_cooldown = 30  # 30 кадров задержка между ударами (~0.5 сек при 60 FPS)
-                        else:
-                            enemy.attack_cooldown -= 1
-                        enemy.dx = 0
-                enemy.dy = 0
+                        # --- ВРАГИ НАНОСЯТ УРОН ---
+                        if player.rect.colliderect(enemy.rect):
+                            enemy.dx = 0
+                            enemy.dy = 0
+                            # Добавляем урон врага игроку
+                            if not hasattr(enemy, "attack_cooldown"):
+                                enemy.attack_cooldown = 0
+                            if enemy.attack_cooldown <= 0:
+                                damage = getattr(enemy, "damage", 5)  # По умолчанию 5 урона
+                                effective_damage = max(1, int(damage * (1 - getattr(player, "protection", 0) / 100)))
+                                player.health -= effective_damage
+                                # --- Add damage popup for player ---
+                                add_damage_popup(player.rect.centerx, player.rect.top, f"-{effective_damage}", (255, 0, 0))
+                                enemy.attack_cooldown = 30  # 30 кадров задержка между ударами (~0.5 сек при 60 FPS)
+                            else:
+                                enemy.attack_cooldown -= 1
+                            enemy.dx = 0
+                    enemy.dy = 0
 
             # --- УДАРИ ПО ІГРОКАМ (по кнопці пробел) ---
-            if pygame.key.get_pressed()[pygame.K_SPACE]:
-                enemies_to_remove = []
-                for enemy in enemies:
-                    if player.rect.colliderect(enemy.rect):
-                        if not hasattr(enemy, "hit_cooldown"):
-                            enemy.hit_cooldown = 0
-                        if enemy.hit_cooldown <= 0:
-                            player_damage = getattr(player, "atk", 10)
-                            prev_health = getattr(enemy, "health", 10)
-                            enemy.health = prev_health - player_damage
-                            # --- Add damage popup for enemy ---
-                            add_damage_popup(enemy.rect.centerx, enemy.rect.top, f"-{player_damage}", (255, 255, 0))
-                            if enemy.health <= 0:
-                                # --- Якщо убит босс, появляется телепорт ---
-                                if hasattr(enemy, "type") and "boss" in enemy.type:
-                                    npcs.append(Npc(
-                                        enemy.rect.x,
-                                        enemy.rect.y,
-                                        "teleport",
-                                        {
-                                            'enter': textures['enter'],
-                                            'teleport': textures['teleport']
-                                        }
-                                    ))
-                                    boss_defeated_and_portal_used = False
-                                enemies_to_remove.append(enemy)
+                if pygame.key.get_pressed()[pygame.K_SPACE]:
+                    enemies_to_remove = []
+                    for enemy in enemies:
+                        if player.rect.colliderect(enemy.rect):
+                            if not hasattr(enemy, "hit_cooldown"):
+                                enemy.hit_cooldown = 0
+                            if enemy.hit_cooldown <= 0:
+                                player_damage = getattr(player, "atk", 10)
+                                prev_health = getattr(enemy, "health", 10)
+                                enemy.health = prev_health - player_damage
+                                # --- Add damage popup for enemy ---
+                                add_damage_popup(enemy.rect.centerx, enemy.rect.top, f"-{player_damage}", (255, 255, 0))
+                                if enemy.health <= 0:
+                                    # --- Якщо убит босс, появляется телепорт ---
+                                    if hasattr(enemy, "type") and "boss" in enemy.type:
+                                        npcs.append(Npc(
+                                            enemy.rect.x,
+                                            enemy.rect.y,
+                                            "teleport",
+                                            {
+                                                'enter': textures['enter'],
+                                                'teleport': textures['teleport']
+                                            }
+                                        ))
+                                        boss_defeated_and_portal_used = False
+                                    enemies_to_remove.append(enemy)
+                                    # Добавляем врага в defeated_enemies
+                                    defeated_enemies.add((enemy.rect.x, enemy.rect.y, getattr(enemy, "type", "zombie_left")))
+                                    enemies_to_remove.append(enemy)
+                                else:
+                                    enemy.hit_cooldown = 15
                             else:
-                                enemy.hit_cooldown = 15
-                        else:
-                            enemy.hit_cooldown -= 1
-                # Remove dead enemies after the loop
-                for enemy in enemies_to_remove:
-                    if enemy in enemies:
-                        enemies.remove(enemy)
-        
-            keys = {pygame.K_w, pygame.K_a, pygame.K_s, pygame.K_d}
-            pressed = pygame.key.get_pressed()
-            active_keys = {key for key in keys if pressed[key]}
-            player.handle_input(active_keys)
-            if not active_keys:
-                player.dx = 0
-                player.dy = 0
-            player.update(blocks, items, statues)
-            camera.update(player)
+                                enemy.hit_cooldown -= 1
+                    # Remove dead enemies after the loop
+                    for enemy in enemies_to_remove:
+                        if enemy in enemies:
+                            enemies.remove(enemy)
+                            # --- 20% шанс выпадения зелья при убийстве зомби или скелета ---
+                            if hasattr(enemy, "type") and ("zombie" in enemy.type or "skeleton" in enemy.type):
+                                if random.random() < 0.3:
+                                    player_potions += 1
+            
+                keys = {pygame.K_w, pygame.K_a, pygame.K_s, pygame.K_d, pygame.K_UP, pygame.K_DOWN, pygame.K_LEFT, pygame.K_RIGHT}
+                pressed = pygame.key.get_pressed()
+                active_keys = {key for key in keys if pressed[key]}
+                player.handle_input(active_keys)
+                if not active_keys:
+                    player.dx = 0
+                    player.dy = 0
+                player.update(blocks, items, statues)
+                camera.update(player)
 
 
         # Перевірка колізій з ворогами
@@ -1896,26 +2060,29 @@ while running:
 
         # Перевірка колізії з NPC типу 'Enter' або 'Teleport'
         for npc in npcs:
-            if player.rect.colliderect(npc.rect):
+            if player is not None and player.rect.colliderect(npc.rect):
                 if npc.type == 'enter' and not level_transitioning:
                     if settings.get("level_select", False):
-                        # --- Діалог вибору рівня ---
-                        selected_file = select_level_file()
-                        if selected_file:
-                            print(f"Вибрано рівень: {selected_file}")
-                            # --- Зберігаємо стан гемів і статуй перед переходом ---
-                            save_player_gems_state(player)
-                            save_statues_state(statues)
-                            level_transitioning = True
-                            level_path = Path(selected_file)
-                            player = None
-                            camera = None
-                            background_grid = None
-                            statues = None  # залишаємо для явного скидання
-                            # Після цього цикл ініціалізує новий рівень автоматично
-                            level_transitioning = False
-                        else:
-                            print("Вибір рівня скасовано.")
+                        if not level_select_shown:
+                            # --- Діалог вибору рівня ---
+                            selected_file = select_level_file()
+                            if selected_file:
+                                print(f"Вибрано рівень: {selected_file}")
+                                # --- Зберігаємо стан гемів і статуй перед переходом ---
+                                save_player_gems_state(player)
+                                save_statues_state(statues)
+                                level_transitioning = True
+                                level_path = Path(selected_file)
+                                level_data = parse_level_file(level_path)
+                                player = None
+                                camera = None
+                                background_grid = None
+                                statues = None  # залишаємо для явного скидання
+                                # Після цього цикл ініціалізує новий рівень автоматично
+                                level_transitioning = False
+                            else:
+                                print("Вибір рівня скасовано.")
+                            level_select_shown = True  # <-- Меню вызвано, больше не показываем пока не выйдет из зоны
                         break
                     else:
                         # --- Цикл по уровням: после портала грузим следующий номер ---
@@ -1931,6 +2098,7 @@ while running:
                             save_statues_state(statues)
                             level_transitioning = True
                             level_path = next_level_path
+                            level_data = parse_level_file(level_path)
                             player = None
                             camera = None
                             background_grid = None
@@ -1943,6 +2111,7 @@ while running:
                             save_statues_state(statues)
                             level_transitioning = True
                             level_path = LEVELS_DIR / "level1.lvl"
+                            level_data = parse_level_file(level_path)
                             player = None
                             camera = None
                             background_grid = None
@@ -1956,6 +2125,7 @@ while running:
                     save_statues_state(statues)
                     level_transitioning = True
                     level_path = LEVELS_DIR / "level0.lvl"
+                    level_data = parse_level_file(level_path)
                     player = None
                     camera = None
                     background_grid = None
@@ -1964,7 +2134,10 @@ while running:
                     boss_defeated_and_portal_used = True
                     current_level_number += 1  # <--- INCREMENT LEVEL NUMBER for next cave entry
                     break
-
+            else:
+                # Если игрок НЕ в зоне входа, сбрасываем флаг
+                if npc.type == 'enter' and level_select_shown:
+                    level_select_shown = False
         # --- Рендер меню налаштувань після обробки подій ---
     if showing_settings:
         overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
@@ -1984,7 +2157,7 @@ while running:
         slider_y = int(SCREEN_HEIGHT * 0.36)
         slider_width = int(SCREEN_WIDTH * 0.22)
         slider_height = 10
-        for event in pygame.event.get():
+        for event in events:
                 if event.type == pygame.QUIT:
                     running = False
                 elif ( event.type == pygame.MOUSEBUTTONDOWN 
@@ -2066,7 +2239,7 @@ while running:
             slot_rects, save_rect, load_rect, back_rect = render_saves_menu(screen, menu_font, pause_menu_image, pause_menu_buttons, SAVE_SLOTS, selected_save_slot)
             cursor.draw(screen)
             pygame.display.flip()
-            for event in pygame.event.get():
+            for event in events:
                 if event.type == pygame.QUIT:
                     running = False
                 elif event.type == pygame.MOUSEBUTTONDOWN:
@@ -2112,7 +2285,7 @@ while running:
         slider_y = int(SCREEN_HEIGHT * 0.36)
         slider_width = int(SCREEN_WIDTH * 0.22)
         slider_height = 10
-        for event in pygame.event.get():
+        for event in events:
             if event.type == pygame.QUIT:
                 running = False
             # --- Добавлено: обработка ресайза окна в меню настроек ---
@@ -2209,7 +2382,7 @@ while running:
             slot_rects, save_rect, load_rect, back_rect = render_saves_menu(screen, menu_font, pause_menu_image, pause_menu_buttons, SAVE_SLOTS, selected_save_slot)
             cursor.draw(screen)
             pygame.display.flip()
-            for event in pygame.event.get():
+            for event in events:
                 if event.type == pygame.QUIT:
                     running = False
                 elif event.type == pygame.MOUSEBUTTONDOWN:
@@ -2253,7 +2426,7 @@ while running:
         slot_rects, save_rect, load_rect, back_rect = render_saves_menu(screen, menu_font, pause_menu_image, pause_menu_buttons, SAVE_SLOTS, selected_save_slot)
         cursor.draw(screen)
         pygame.display.flip()
-        for event in pygame.event.get():
+        for event in events:
             if event.type == pygame.QUIT:
                 running = False
 
@@ -2274,9 +2447,6 @@ while running:
                     "save": (int(SCREEN_WIDTH * 0.74), int(SCREEN_HEIGHT * 0.80)),
                 }
                 continue
-            elif ( event.type == pygame.MOUSEBUTTONDOWN 
-                or ( event.type == pygame.MOUSEMOTION and getattr(event, "buttons", (0,))[0] ) 
-              ) and slider_x <= event.pos[0] <= slider_x + slider_width and slider_y - 10 <= event.pos[1] <= slider_y + slider_height + 10:
                 mouse_pos = event.pos
                 # --- Повзунок гучності ---
                 print(f"MOUSE ={event.type},{getattr(event, 'buttons', (0,))[0]},")
@@ -2297,6 +2467,16 @@ while running:
                     # Повертаємося у головне меню, якщо не в грі
                     if not showing_level:
                         showing_menu = True
+                if load_rect and load_rect.collidepoint(mouse_pos):
+                    if selected_save_slot is not None:
+                        if load_game(selected_save_slot):
+                            just_loaded_save = True
+                        showing_saves = False
+                        showing_menu = False
+                        showing_level = True
+                        is_paused = False
+                        showing_settings = False
+                        selected_save_slot = None
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
 
@@ -2310,7 +2490,7 @@ while running:
         button_rect = render_game_over(screen, title_font, menu_font)
         cursor.draw(screen)
         pygame.display.flip()
-        for event in pygame.event.get():
+        for event in events:
             if event.type == pygame.QUIT:
                 running = False
             elif event.type == pygame.MOUSEBUTTONDOWN:
@@ -2320,6 +2500,7 @@ while running:
                     showing_menu = False
                     showing_level = True
                     level_path = LEVELS_DIR / "level0.lvl"
+                    level_data = parse_level_file(level_path)
                     player = None
                     camera = None
                     background_grid = None
@@ -2328,6 +2509,7 @@ while running:
                     items = []
                     statues = []
                     npcs = []
+                    player_potions = 0
                     pressed_keys.clear()
                     showing_stats = False
                     is_paused = False
@@ -2337,6 +2519,7 @@ while running:
                     level_data = None
                     player_gems_state = {}
                     statues_state = {}
+                    level_select_shown = False  # <--- Reset on game over restart
                     break
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_RETURN or event.key == pygame.K_SPACE:
@@ -2344,6 +2527,7 @@ while running:
                     showing_menu = False
                     showing_level = True
                     level_path = LEVELS_DIR / "level0.lvl"
+                    level_data = parse_level_file(level_path)
                     player = None
                     camera = None
                     background_grid = None
@@ -2352,6 +2536,7 @@ while running:
                     items = []
                     statues = []
                     npcs = []
+                    player_potions = 0
                     pressed_keys.clear()
                     showing_stats = False
                     is_paused = False
@@ -2361,6 +2546,7 @@ while running:
                     level_data = None
                     player_gems_state = {}
                     statues_state = {}
+                    level_select_shown = False  # <--- Reset on game over restart
                     break
         continue
     cursor.draw(screen)
