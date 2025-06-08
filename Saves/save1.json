@@ -2,8 +2,8 @@
     "level_path": "level0.lvl",
     "level_path_relative": true,
     "player": {
-        "x": 1200,
-        "y": 600,
+        "x": 828,
+        "y": 400,
         "health": 100,
         "max_health": 100,
         "protection": 5,
@@ -13,7 +13,7 @@
         "potions": 0,
         "gems": {
             "gem11": false,
-            "gem12": false,
+            "gem12": true,
             "gem13": false,
             "gem14": false,
             "gem15": false,
@@ -21,7 +21,7 @@
             "gem22": false,
             "gem23": false,
             "gem24": false,
-            "gem25": false,
+            "gem25": true,
             "gem31": false,
             "gem32": false,
             "gem33": false,
@@ -34,7 +34,7 @@
             "gem45": false,
             "gem51": false,
             "gem52": false,
-            "gem53": false,
+            "gem53": true,
             "gem54": false,
             "gem55": false
         }
@@ -59,7 +59,7 @@
     },
     "player_gems_state": {
         "gem11": false,
-        "gem12": false,
+        "gem12": true,
         "gem13": false,
         "gem14": false,
         "gem15": false,
@@ -67,7 +67,7 @@
         "gem22": false,
         "gem23": false,
         "gem24": false,
-        "gem25": false,
+        "gem25": true,
         "gem31": false,
         "gem32": false,
         "gem33": false,
@@ -80,18 +80,42 @@
         "gem45": false,
         "gem51": false,
         "gem52": false,
-        "gem53": false,
+        "gem53": true,
         "gem54": false,
         "gem55": false
     },
     "completed_levels": [],
     "enemies_state": [],
-    "defeated_enemies": [],
-    "opened_chests": [],
+    "defeated_enemies": [
+        [
+            450,
+            700,
+            "zombie"
+        ],
+        [
+            899,
+            170,
+            "boss"
+        ]
+    ],
+    "opened_chests": [
+        [
+            600,
+            400
+        ],
+        [
+            1300,
+            1300
+        ],
+        [
+            100,
+            800
+        ]
+    ],
     "collected_gems": [],
     "upgraded_statues": [],
-    "current_level_number": 1,
-    "boss_defeated_and_portal_used": false,
+    "current_level_number": 2,
+    "boss_defeated_and_portal_used": true,
     "level_select_shown": false,
     "showing_menu": false,
     "showing_level": true,
@@ -102,10 +126,11 @@
     "damage_popups": [],
     "player_potions": 0,
     "settings": {
-        "volume": 4,
+        "volume": 5,
         "fullscreen": false,
-        "hints": true,
+        "hints": false,
         "level_select": false
     },
-    "datetime": "2025-06-08 10:20:57"
+    "total_time_seconds": 305,
+    "datetime": "2025-06-08 17:02:22"
 }
