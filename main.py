@@ -63,6 +63,8 @@ showing_game_completed = False
 total_time_seconds = 0
 last_time_update = pygame.time.get_ticks()
 game_completed_once = False
+level_menu_scroll_offset = 0
+LEVEL_MENU_VISIBLE_SLOTS = 7
 
 # --- Виправлено: використовуємо всі типи дерев для level0.lvl ---
 def determine_tree_texture_fixed(x, y, blocks_set, textures):
@@ -389,6 +391,10 @@ def render_settings_menu(screen, settings_menu_image, settings_menu_buttons, set
         pygame.draw.line(screen, (255, 255, 255), (level_select_rect.left+5, level_select_rect.top+15), (level_select_rect.left+15, level_select_rect.bottom-5), 3)
         pygame.draw.line(screen, (255, 255, 255), (level_select_rect.left+15, level_select_rect.bottom-5), (level_select_rect.right-5, level_select_rect.top+5), 3)
         
+def get_enemy_hp_multiplier(level_number):
+    # Например, каждый уровень +20% HP (1.0, 1.2, 1.4, ...)
+    return 1.0 + 0.2 * (level_number - 1)
+
 # Функція для збереження налаштувань у файл
 def save_settings_to_file(settings_dict):
     """
@@ -528,8 +534,17 @@ except pygame.error as e:
     print(f"Помилка завантаження фонового зображення: {e}")
     sys.exit()
 
+def get_exe_dir():
+    if getattr(sys, 'frozen', False):
+        # Якщо запущено з exe
+        return Path(sys.executable).parent
+    else:
+        # Якщо запущено з .py
+        return Path(__file__).resolve().parent
+
+BASE_DIR = get_exe_dir()
 SAVE_SLOTS = 3  # Number of save slots
-SAVES_DIR = BASE_DIR / "Saves"  # Use 'Saves' with capital S
+SAVES_DIR = BASE_DIR / "Saves"
 os.makedirs(SAVES_DIR, exist_ok=True)
 
 def get_save_path(slot):
@@ -686,7 +701,7 @@ def deserialize_game_state(state):
     for statue in statues:
         cell_x = statue.rect.x // TILE_SIZE
         cell_y = statue.rect.y // TILE_SIZE
-        key = f"{cell_x},{cell_y}"
+        key = f"{cell_x},{cell_y}"  # ключ як у serialize_game_state
         if key in statues_state_local:
             statue.type = statues_state_local[key]
             if hasattr(statue, "texture") and statue.type in textures:
@@ -745,11 +760,11 @@ def deserialize_game_state(state):
         enemies = [
             Enemy(
                 enemy['x'], enemy['y'], enemy_type_mapping.get(enemy['type'], 'zombie_left'), enemy_textures,
-                health={
+                health=int({
                     'zombie': 50,
                     'skeleton': 100,
                     'boss': 200
-                }.get(enemy_type_mapping.get(enemy['type'], 'zombie_left'), 1)
+                }.get(enemy_type_mapping.get(enemy['type'], 'zombie_left'), 1) * get_enemy_hp_multiplier(current_level_number))
             ) for enemy in level_data['enemies']
         ]
         print(f"[DEBUG] Loaded {len(enemies)} enemies from level_data")
@@ -1144,14 +1159,95 @@ menu1_played = False
 current_music = None
 selected_save_slot = None
 level_transitioning = False
+showing_levels = False
+selected_level_file = None
 
-# --- Додаємо змінну для відстеження переходу на новий рівень після босса ---
+def get_level_files():
+    """Повертає список .lvl-файлів у LEVELS_DIR."""
+    return sorted([f for f in os.listdir(LEVELS_DIR) if f.endswith('.lvl')])
+
+def render_levels_menu(screen, menu_font, settings_menu_image, pause_menu_buttons, selected_level=None, scroll_offset=0):
+    screen.blit(settings_menu_image, settings_menu_rect)  # 2. Малюємо меню
+    wide_width = int(SCREEN_WIDTH * 0.7)
+    wide_height = int(SCREEN_HEIGHT * 0.7)
+    wide_x = (SCREEN_WIDTH - wide_width) // 2
+    wide_y = (SCREEN_HEIGHT - wide_height) // 2
+
+    title = title_font.render("Вибір рівня", True, (255, 255, 255))
+    title_rect = title.get_rect(center=(SCREEN_WIDTH // 2, wide_y + int(wide_height * 0.09)))
+    screen.blit(title, title_rect)
+
+    level_files = get_level_files()
+    slot_rects = []
+    btn_w = pause_menu_buttons.get_width()
+    btn_h = pause_menu_buttons.get_height()
+    slot_spacing = btn_h + 18  # Збільшений відступ
+
+    # --- Кнопка "Назад" ---
+    back_btn_pos = (wide_x + int(wide_width * 0.75), wide_y + wide_height - btn_h - 24)
+    back_rect = pygame.Rect(back_btn_pos, (btn_w, btn_h))
+
+    # --- Область для слотів ---
+    slot_area_x = wide_x + int(wide_width * 0.08)
+    slot_area_y = wide_y + int(wide_height * 0.18)
+    slot_area_w = wide_width - int(wide_width * 0.16)
+    slot_area_height = back_btn_pos[1] - slot_area_y - 12
+
+    visible_slots = max(1, slot_area_height // slot_spacing)
+    max_offset = max(0, len(level_files) - visible_slots)
+    scroll_offset = min(max(0, scroll_offset), max_offset)
+
+    for i in range(visible_slots):
+        idx = scroll_offset + i
+        if idx >= len(level_files):
+            break
+        fname = level_files[idx]
+        y = slot_area_y + i * slot_spacing
+        slot_bg_rect = pygame.Rect(slot_area_x, y, slot_area_w, btn_h + 12)
+        pygame.draw.rect(screen, (60, 60, 90), slot_bg_rect, border_radius=12)
+        slot_label = menu_font.render(fname, True, (255, 255, 255))
+        slot_label_rect = slot_label.get_rect(midleft=(slot_area_x + 20, y + btn_h // 2 + 6))
+        screen.blit(slot_label, slot_label_rect)
+        slot_btn_pos = (slot_area_x + slot_area_w - btn_w - 20, y + 6)
+        screen.blit(pause_menu_buttons, slot_btn_pos)
+        slot_btn_text = menu_font.render("Обрати", True, (255, 255, 255))
+        slot_btn_text_rect = slot_btn_text.get_rect(center=(slot_btn_pos[0] + btn_w // 2, slot_btn_pos[1] + btn_h // 2))
+        screen.blit(slot_btn_text, slot_btn_text_rect)
+        slot_rects.append((fname, pygame.Rect(slot_btn_pos, (btn_w, btn_h))))
+
+    # --- Смуга прокрутки ---
+    if len(level_files) > visible_slots:
+        # --- ЗМЕНШЕНО ширину та відступ смуги прокрутки ---
+        scrollbar_width = 16  # Було 16
+        scrollbar_margin = 10  # Було 10
+        max_handle_height = visible_slots * slot_spacing
+        scrollbar_height = min(
+            max_handle_height,
+            max(24, int((visible_slots / len(level_files)) * max_handle_height))
+        )
+        max_offset = len(level_files) - visible_slots
+        if max_offset > 0:
+            scrollbar_y = slot_area_y + int((scroll_offset / max_offset) * (max_handle_height - scrollbar_height))
+        else:
+            scrollbar_y = slot_area_y
+        scrollbar_rect = pygame.Rect(slot_area_x + slot_area_w + scrollbar_margin, slot_area_y, scrollbar_width, max_handle_height)
+        pygame.draw.rect(screen, (60, 60, 90), scrollbar_rect, border_radius=6)
+        handle_rect = pygame.Rect(scrollbar_rect.x, scrollbar_y, scrollbar_width, scrollbar_height)
+        pygame.draw.rect(screen, (180, 180, 180), handle_rect, border_radius=6)
+    else:
+        scrollbar_rect = None
+        handle_rect = None
+
+    # --- Кнопка "Назад" ---
+    screen.blit(pause_menu_buttons, back_btn_pos)
+    back_text = menu_font.render("Назад", True, (255, 255, 255))
+    back_text_rect = back_text.get_rect(center=(back_btn_pos[0] + btn_w // 2, back_btn_pos[1] + btn_h // 2))
+    screen.blit(back_text, back_text_rect)
+
+    return slot_rects, back_rect, scrollbar_rect, handle_rect, len(level_files), visible_slots
+
 boss_defeated_and_portal_used = False
-
-# --- Track current level number for cycling ---
-current_level_number = 1  # Start from level1.lvl after cave
-
-# --- Damage popups ---
+current_level_number = 1
 damage_popups = []
 
 def add_damage_popup(x, y, value, color=(255, 0, 0)):
@@ -1161,7 +1257,7 @@ def add_damage_popup(x, y, value, color=(255, 0, 0)):
         "y": y,
         "value": value,
         "color": color,
-        "timer": 40,  # frames to show
+        "timer": 40,
         "alpha": 255
     })
 
@@ -1170,17 +1266,17 @@ def update_and_draw_damage_popups(screen, camera):
     global damage_popups
     new_popups = []
     for popup in damage_popups:
-        # Move up
+      
         popup["y"] -= 1
         popup["timer"] -= 1
-        # Fade out
+       
         if popup["timer"] < 15:
             popup["alpha"] = int(255 * popup["timer"] / 15)
-        # Draw
+        
         font_popup = pygame.font.Font("assets/fonts/Hitch-hike.otf", 32)
         text = font_popup.render(str(popup["value"]), True, popup["color"])
         text.set_alpha(popup["alpha"])
-        # --- FIX: Use camera.apply_rect on a Rect, not camera.apply on a tuple ---
+        
         popup_rect = pygame.Rect(int(popup["x"]), int(popup["y"]), 1, 1)
         pos = camera.apply_rect(popup_rect).topleft
         screen.blit(text, pos)
@@ -1447,6 +1543,91 @@ while running:
                 elif event.type == pygame.KEYUP:
                     if event.key in pressed_keys:
                         pressed_keys.discard(event.key)
+    if showing_levels:
+        # 1. Спочатку малюємо гру (як у elif showing_level)
+        render_background(screen, background_grid, camera)
+        render_objects = []
+        for block in blocks:
+            render_objects.append((block.rect.y, block))
+        for statue in statues:
+            render_objects.append((statue.rect.bottom, statue))
+        if player is not None:
+            render_objects.append((player.rect.bottom, player))
+        for item in items:
+            render_objects.append((item.rect.y, item))
+        for enemy in enemies:
+            render_objects.append((enemy.rect.y, enemy))
+        for npc in npcs:
+            render_objects.append((npc.rect.y, npc))
+        render_objects.sort(key=lambda obj: obj[0])
+        for _, obj in render_objects:
+            obj.draw(screen, camera)
+        if player is not None:
+            draw_player_gems(player, screen)
+        update_and_draw_damage_popups(screen, camera)
+        # (Можна додати ще смужки здоров'я, іконки, тощо — як у showing_level)
+
+        # 2. Тепер малюємо меню вибору рівня поверх гри
+        slot_rects, back_rect, scrollbar_rect, handle_rect, total_files, visible_slots = render_levels_menu(
+            screen, menu_font, settings_menu_image, pause_menu_buttons, selected_level_file, level_menu_scroll_offset
+        )
+        cursor.draw(screen)
+        pygame.display.flip()
+        for event in events:
+            if event.type == pygame.QUIT:
+                running = False
+            elif event.type == pygame.MOUSEBUTTONDOWN:
+                mouse_pos = event.pos
+                for i, (fname, rect) in enumerate(slot_rects):
+                    if rect.collidepoint(mouse_pos):
+                        # --- Вибрано рівень ---
+                        save_player_gems_state(player)
+                        save_statues_state(statues)
+                        level_transitioning = True
+                        # Враховуємо прокрутку!
+                        real_fname = get_level_files()[level_menu_scroll_offset + i]
+                        level_path = LEVELS_DIR / real_fname
+                        level_data = parse_level_file(level_path)
+                        player = None
+                        camera = None
+                        background_grid = None
+                        statues = None
+                        showing_levels = False
+                        level_transitioning = False
+                        break
+                if back_rect.collidepoint(mouse_pos):
+                    showing_levels = False
+                    level_select_shown = False
+                    break
+                # Drag по смузі прокрутки (опціонально)
+                if handle_rect and handle_rect.collidepoint(mouse_pos):
+                    dragging_scroll = True
+                    drag_start_y = mouse_pos[1]
+                    drag_start_offset = level_menu_scroll_offset
+            elif event.type == pygame.MOUSEBUTTONUP:
+                dragging_scroll = False
+            elif event.type == pygame.MOUSEMOTION:
+                if globals().get("dragging_scroll", False) and handle_rect:
+                    mouse_pos = event.pos
+                    delta_y = mouse_pos[1] - drag_start_y
+                    # Виправлено: використовуємо visible_slots замість LEVEL_MENU_VISIBLE_SLOTS
+                    max_offset = total_files - visible_slots
+                    if max_offset > 0:
+                        scroll_area = visible_slots * (pause_menu_buttons.get_height() + 18) - handle_rect.height
+                        rel = delta_y / max(1, scroll_area)
+                        level_menu_scroll_offset = int(drag_start_offset + rel * max_offset)
+                        level_menu_scroll_offset = max(0, min(level_menu_scroll_offset, max_offset))
+            elif event.type == pygame.MOUSEWHEEL:
+                # Прокрутка колесом миші
+                max_offset = total_files - visible_slots
+                if max_offset > 0:
+                    level_menu_scroll_offset -= event.y
+                    level_menu_scroll_offset = max(0, min(level_menu_scroll_offset, max_offset))
+            elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
+                showing_levels = False
+                level_select_shown = False
+                break
+        continue  # Після вибору рівня або "Назад" повертаємося у гру
     elif showing_level:
         # Якщо ми тут, значить showing_level == True
         # Відображення рівня
@@ -1492,11 +1673,11 @@ while running:
                 enemies = [
                     Enemy(
                         enemy['x'], enemy['y'], enemy_type_mapping.get(enemy['type'], 'zombie_left'), enemy_textures,
-                        health={
+                        health=int({
                             'zombie': 50,
                             'skeleton': 100,
                             'boss': 200
-                        }.get(enemy_type_mapping.get(enemy['type'], 'zombie_left'), 1)
+                        }.get(enemy_type_mapping.get(enemy['type'], 'zombie_left'), 1) * get_enemy_hp_multiplier(current_level_number))
                     ) for enemy in level_data['enemies']
                 ]
             # --- Увеличиваем хитбокс босса до 300x300 ---
@@ -2260,27 +2441,12 @@ while running:
             if player is not None and player.rect.colliderect(npc.rect):
                 if npc.type == 'enter' and not level_transitioning:
                     if settings.get("level_select", False):
-                        if not level_select_shown:
-                            # --- Діалог вибору рівня ---
-                            selected_file = select_level_file()
-                            if selected_file:
-                                print(f"Вибрано рівень: {selected_file}")
-                                # --- Зберігаємо стан гемів і статуй перед переходом ---
-                                save_player_gems_state(player)
-                                save_statues_state(statues)
-                                level_transitioning = True
-                                level_path = Path(selected_file)
-                                level_data = parse_level_file(level_path)
-                                player = None
-                                camera = None
-                                background_grid = None
-                                statues = None  # залишаємо для явного скидання
-                                # Після цього цикл ініціалізує новий рівень автоматично
-                                level_transitioning = False
-                            else:
-                                print("Вибір рівня скасовано.")
-                            level_select_shown = True  # <-- Меню вызвано, больше не показываем пока не выйдет из зоны
-                        break
+                        # --- Додаємо: меню вибору рівнів можна викликати лише один раз за підхід ---
+                        if not level_select_shown and not getattr(npc, "level_select_used", False):
+                            showing_levels = True
+                            level_select_shown = True
+                            npc.level_select_used = True  # Позначаємо, що вже викликали меню для цього NPC
+                            break
                     else:
                         # --- Цикл по уровням: после портала грузим следующий номер ---
                         if boss_defeated_and_portal_used:
@@ -2346,7 +2512,8 @@ while running:
                     current_level_number += 1
                     break
             else:
-                # Если игрок НЕ в зоне входа, сбрасываем флаг
+                if npc.type == 'enter':
+                    npc.level_select_used = False
                 if npc.type == 'enter' and level_select_shown:
                     level_select_shown = False
         # --- Рендер меню налаштувань після обробки подій ---
