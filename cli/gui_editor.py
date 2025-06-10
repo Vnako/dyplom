@@ -568,7 +568,14 @@ class LevelEditorApp(QWidget):
         self.dark_theme_action.setChecked(self.current_theme == "dark")
 
     def show_about(self):
-        QMessageBox.information(self, "Про програму", "Це редактор рівнів для гри Slime Quest: Dungeon. Дипломний проект виконала Коломоєць Вероніка з групи 123-21-1. За всіма питаннями звератись на пошту: veroniqe.kol.556@gmail.com")
+        QMessageBox.information(
+            self,
+            "Про програму",
+            "Це редактор рівнів для гри Slime Quest: Dungeon.\n"
+            "Версія 1.1.\n"
+            "Дипломний проект виконала Коломоєць Вероніка з групи 123-21-1.\n"
+            "За всіма питаннями звератись на пошту: veroniqe.kol.556@gmail.com"
+        )
 
     def focus_height_input(self):
         self.height_input.setFocus()  # Переходить до поля висоти
@@ -631,33 +638,33 @@ class LevelEditorApp(QWidget):
         add_menu = menu.addMenu("Додати")
 
         # Підгрупа "Додати ворога"
-        add_enemy_menu = add_menu.addMenu("Додати ворога")
-        add_enemy_action = QAction("Додати зомбі", self)
+        add_enemy_menu = add_menu.addMenu("Ворог")
+        add_enemy_action = QAction("Зомбі", self)
         add_enemy_action.triggered.connect(lambda: self.add_element('1'))  
         add_enemy_menu.addAction(add_enemy_action)
         
-        add_enemy_action = QAction("Додати скелета", self)
+        add_enemy_action = QAction("Скелет", self)
         add_enemy_action.triggered.connect(lambda: self.add_element('2'))  
         add_enemy_menu.addAction(add_enemy_action)
         
-        add_enemy_action = QAction("Додати боса", self)
+        add_enemy_action = QAction("Бос", self)
         add_enemy_action.triggered.connect(lambda: self.add_element('3'))  
         add_enemy_menu.addAction(add_enemy_action)
 
         # Інші додавання
-        add_player_action = QAction("Додати гравця", self)
+        add_player_action = QAction("Гравець", self)
         add_player_action.triggered.connect(lambda: self.add_element('@'))
         add_menu.addAction(add_player_action)
         
-        add_item_action = QAction("Додати скриню", self)
+        add_item_action = QAction("Скриня", self)
         add_item_action.triggered.connect(lambda: self.add_element('*'))
         add_menu.addAction(add_item_action)
         
-        add_wall_action = QAction("Додати стіну", self)
+        add_wall_action = QAction("Стіна", self)
         add_wall_action.triggered.connect(lambda: self.add_element('#'))
         add_menu.addAction(add_wall_action)
 
-        clear_cell_action = QAction("Очистити клітинку", self)
+        clear_cell_action = QAction("Очистити", self)
         clear_cell_action.triggered.connect(lambda: self.add_element('.'))
         menu.addAction(clear_cell_action)
 

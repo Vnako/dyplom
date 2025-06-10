@@ -2,5 +2,5 @@
     "volume": 0,
     "fullscreen": false,
     "hints": true,
-    "level_select": false
+    "level_select": true
 }
