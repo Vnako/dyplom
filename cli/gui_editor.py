@@ -235,7 +235,7 @@ class LevelEditorApp(QWidget):
         help_menu.addAction(inst1)
         
         inst2 = QAction("Інструкція користувача", self)
-        inst1.triggered.connect(self.open_instruction2_html)
+        inst2.triggered.connect(self.open_instruction2_html)
         help_menu.addAction(inst2)
 
         # Оновлення стану пташок для тем після створення атрибутів
