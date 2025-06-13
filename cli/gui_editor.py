@@ -246,9 +246,9 @@ class LevelEditorApp(QWidget):
         button.setStyleSheet("border: none; background-color: transparent;")  # Приховуємо межі кнопки
 
         # Завантаження основного зображення кнопки
-        pixmap = QPixmap(str(ASSETS_DIR / "button_sm.png"))
+        pixmap = QPixmap(str(ASSETS_DIR / "button.png"))
         if pixmap.isNull():
-            QMessageBox.critical(self, "Помилка", f"Не вдалося завантажити зображення: cli_assets/button_sm.png")
+            QMessageBox.critical(self, "Помилка", f"Не вдалося завантажити зображення: cli_assets/button.png")
             return button
 
         pixmap = pixmap.scaled(150, 40, Qt.KeepAspectRatio, Qt.SmoothTransformation)
